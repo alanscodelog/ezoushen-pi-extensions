@@ -1,8 +1,8 @@
 # pi-quick-cancel
 
-Cancel a running turn and, while the first response is still unfinished, return
-the prompt to the editor — so you never have to cancel by hand and then unwind
-the transcript to recover the prompt.
+Cancel a running turn, rewind the chat to before the prompt was sent, and put
+the prompt back in the editor — a true unwind, so it is as if the prompt was
+never submitted (except that it is waiting in the editor).
 
 ## Install
 
@@ -12,25 +12,29 @@ pi install npm:pi-quick-cancel
 
 ## What it does
 
-The default shortcut is `ctrl+alt+x`. Pressing it while a turn is running calls
-`abort()` to cancel the run and then, depending on how far the run got, decides
-what to do with your prompt:
+The default shortcut is `ctrl+alt+x`. Pressing it while a turn is running
+cancels the run (`abort()`), returns the prompt to the editor, and once the
+aborted loop has settled, rewinds the session tree so the canonical chat
+history ends just before the prompt: the user message and any assistant output
+the run produced drop out of the context entirely.
 
-- **Nothing output yet, or the first response is still streaming** — the run was
-  cancelled before it produced anything you would want to keep, so the extension
-  returns the prompt to the editor. Edit it, resend it, or close the editor.
-  No manual transcript navigation is required.
-- **The first response has already fully streamed** — the prompt is already part
-  of the transcript as context and there is output to preserve, so the extension
-  just cancels the run and leaves the prompt where it is.
+- The prompt is restored to the editor immediately, so you can edit or resend it.
+- The exchange is removed from the session the moment the loop settles
+  (`agent_end`), so the next prompt is sent against the pre-prompt history.
 
-When pi is idle, there is nothing to cancel: the extension best-effort returns
+When pi is idle there is nothing to cancel: the extension best-effort returns
 whatever prompt it can to the editor, and otherwise reports "nothing to cancel".
 
-If the first response produced no text (a still-streaming block, or a block that
-ended without output), the run is treated as unfinished and the prompt is
-returned. Once the first assistant block has fully ended, the prompt is treated
-as finished output and only the run is cancelled.
+### `/quick-cancel` — full-fidelity rewind
+
+The shortcut rewinds the session data, but pi only rebuilds the *visible*
+transcript through its tree-navigation flow, which lives on the command
+context. For an immediate visual rewind (the aborted exchange disappears from
+the transcript right away), run the `quick-cancel` command instead: it cancels
+any in-flight run, waits for it to settle, and invokes pi's own tree
+navigation — which rebuilds the transcript, restores the prompt to the editor,
+and refreshes the agent context in one step. It also works while idle, to
+rewind the last completed exchange.
 
 ### Why `ctrl+alt+x`
 
@@ -47,9 +51,13 @@ another key with the `key` setting if you prefer.
 One shortcut binds to the run (default `ctrl+alt+x`, or `key` /
 `PI_QUICK_CANCEL_KEY`). While pi is not idle the handler calls `abort()` to stop
 the turn and captures the prompt from `before_agent_start`. It observes
-`message_start` and `message_end` to detect when the first assistant response has fully streamed, and returns the prompt to the editor while the first response is unfinished. If that response has already finished, the prompt already belongs to
-the transcript, so only the run is cancelled and the prompt is left in the
-transcript.
+`message_start` and `message_end` to detect how far the run got, and
+returns the prompt to the editor while the first response is unfinished. When
+the run settles, the session is rewound to just before the prompt either way —
+the exchange leaves the canonical history, not just the editor.
+
+The `quick-cancel` command performs the same rewind through pi's tree
+navigation, which also rebuilds the visible transcript.
 
 The terminal must actually send `ctrl+alt+x` for this shortcut to fire; a terminal
 without the kitty keyboard protocol may send the legacy `ESC` sequence instead.
@@ -82,4 +90,4 @@ are not returned — re-attach them when you resend.
 An invalid `key` falls back to `ctrl+alt+x` and warns once per session. If a key
 is bound to a key pi already uses (such as `escape` or `ctrl+x`), pi skips the
 extension's shortcut, so the shortcut never fires — pick a key that does not
-conflict with a built-in.
+conflict with a built-in, or use the `quick-cancel` command.
