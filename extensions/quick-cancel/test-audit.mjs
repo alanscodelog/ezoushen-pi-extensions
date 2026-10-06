@@ -15,9 +15,12 @@ const checks = [
 ];
 
 test("source has zero unexplained machine-specific literals", () => {
+	// The slash-command name is a literal starting with "/" but is not a path.
+	const allowlist = ["\"/quick-cancel\""];
 	const hits = checks.flatMap(([category, pattern]) =>
 		[...source.matchAll(pattern)]
-			.map((match) => ({ category, value: match[0].trim() })));
+			.map((match) => ({ category, value: match[0].trim() })))
+		.filter((hit) => !allowlist.includes(hit.value));
 
 	assert.deepEqual(hits, []);
 	console.log("CLEAN SWEEP: 0 unexplained paths, home references, hosts, or ports");
