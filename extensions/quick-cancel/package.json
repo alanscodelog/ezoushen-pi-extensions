@@ -1,7 +1,7 @@
 {
   "name": "pi-quick-cancel",
-  "version": "0.1.0",
-  "description": "Cancel a running turn and, while the first response is unfinished, return the prompt to the editor.",
+  "version": "0.2.0",
+  "description": "Cancel a running turn, rewind the chat to before the prompt was sent, and restore the prompt to the editor.",
   "type": "module",
   "main": "./quick-cancel.js",
   "exports": "./quick-cancel.js",

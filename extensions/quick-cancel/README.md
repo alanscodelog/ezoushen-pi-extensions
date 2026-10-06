@@ -12,18 +12,16 @@ pi install npm:pi-quick-cancel
 
 ## What it does
 
-The default shortcut is `ctrl+alt+x`. Pressing it while a turn is running
-cancels the run (`abort()`), returns the prompt to the editor, and rewinds the
-session tree so the canonical chat history ends just before the prompt: the
-user message and any assistant output the run produced drop out of the context
-entirely — no matter how far the run got. Pressing it while idle rewinds the
-last completed exchange the same way, leaving whatever you were typing in the
-editor untouched.
+Pressing the shortcut (or running `/quick-cancel`) does one thing, whether a
+turn is running or the last one already completed: it cancels any in-flight
+run, rewinds the session tree so the canonical chat history ends just before
+the prompt (the user message and any assistant output drop out of the context
+entirely), rebuilds the visible transcript, and puts the prompt back in the
+editor. If you were typing a new prompt, that text is left untouched.
 
-The shortcut delegates to the `quick-cancel` command, which performs the
-rewind through pi's tree navigation — that rebuilds the visible transcript
-(the exchange disappears immediately), restores the prompt to the editor, and
-refreshes the agent context in one step.
+Mechanically: the shortcut dispatches the `quick-cancel` command, which waits
+for the loop to settle and invokes pi's tree navigation on the prompt's
+session entry — the only API surface that rebuilds the transcript.
 
 ### Why `ctrl+alt+x`
 
@@ -37,20 +35,15 @@ another key with the `key` setting if you prefer.
 
 ## External contract
 
-One shortcut binds to the run (default `ctrl+alt+x`, or `key` /
-`PI_QUICK_CANCEL_KEY`). The shortcut dispatches the `quick-cancel` command,
-which cancels any in-flight run, waits for the loop to settle, and invokes
-pi's tree navigation on the prompt's session entry: the canonical history is
-rewound to before the prompt, the visible transcript is rebuilt, and the
-prompt is restored to the editor. Pressing the shortcut while idle rewinds the
-last completed exchange the same way. The command can also be run directly as
-`/quick-cancel`.
+One shortcut (default `ctrl+alt+x`, or `key` / `PI_QUICK_CANCEL_KEY`) and one
+command (`/quick-cancel`), both driving the same rewind described above. An
+invalid `key` falls back to `ctrl+alt+x` with a warning once per session.
 
-The terminal must actually send `ctrl+alt+x` for this shortcut to fire; a terminal
-without the kitty keyboard protocol may send the legacy `ESC` sequence instead,
-which pi does not bind. Verified against one such runtime: `alt+<letter>` (the
-classic `ESC`+letter meta form) fires fine, while `alt+escape` arrives as an
-ambiguous double-`ESC` and cannot be bound at all.
+The terminal must actually send `ctrl+alt+x` for the shortcut to fire; a
+terminal without the kitty keyboard protocol may send the legacy `ESC`
+sequence instead, which pi does not bind. Verified against one such runtime:
+`alt+<letter>` (the classic `ESC`+letter meta form) fires fine, while
+`alt+escape` arrives as an ambiguous double-`ESC` and cannot be bound at all.
 
 ## Settings
 

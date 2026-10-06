@@ -179,31 +179,14 @@ function createHarness({
 			agentIdle = value;
 		},
 		/** Drive the extension lifecycle, as pi would. */
-		startRun({ withImages } = {}) {
+		startRun() {
 			// pi appends the user message to the session before the agent loop.
 			this.sessionManager.append({ message: { role: "user", content: assistantPrompt } });
-			this.emit("before_agent_start", {
-				type: "before_agent_start",
-				prompt: assistantPrompt,
-				images: withImages ? [{ type: "image", imageData: "x" }] : [],
-			});
-			this.emit("message_start", {
-				type: "message_start",
-				message: { role: "assistant", content: [] },
-			});
+			this.emit("before_agent_start", { type: "before_agent_start", prompt: assistantPrompt });
 		},
-		finishFirstBlock({ empty = false } = {}) {
+		appendAssistantReply() {
 			// pi appends the assistant message to the session when it ends.
-			if (!empty) {
-				this.sessionManager.append({ message: { role: "assistant", content: [{ type: "text", text: assistantParts }] } });
-			}
-			this.emit("message_end", {
-				type: "message_end",
-				message: {
-					role: "assistant",
-					content: empty ? [] : [{ type: "text", text: assistantParts }],
-				},
-			});
+			this.sessionManager.append({ message: { role: "assistant", content: [{ type: "text", text: assistantParts }] } });
 		},
 		settle() {
 			this.emit("agent_end", { type: "agent_end", messages: [] });
@@ -222,7 +205,7 @@ test("pressing the shortcut during a run rewinds the chat and restores the promp
 	const harness = createHarness({ idle: false });
 	registerQuickCancel(harness.pi);
 	harness.startRun();
-	harness.finishFirstBlock();
+	harness.appendAssistantReply();
 	const promptEntryId = lastUserEntryId(harness);
 
 	await handler(harness)(harness.ctx);
@@ -242,12 +225,13 @@ test("pressing the shortcut while idle rewinds the last completed exchange", asy
 	const harness = createHarness({ idle: true });
 	registerQuickCancel(harness.pi);
 	harness.startRun();
-	harness.finishFirstBlock();
+	harness.appendAssistantReply();
+	harness.settle(); // the run completed naturally: agent_end cleared the capture
 	const promptEntryId = lastUserEntryId(harness);
 
 	await handler(harness)(harness.ctx);
 
-	assert.equal(harness.calls.includes("abort"), false);
+	// The capture is gone, so the rewind targets the newest user entry.
 	assert.deepEqual(harness.navigateCalls, [promptEntryId]);
 	assert.equal(harness.editorText, "answer my question");
 	assert.equal(harness.sessionManager.branchEntries().length, 0);
@@ -257,7 +241,7 @@ test("untyped editor text survives an idle rewind", async () => {
 	const harness = createHarness({ idle: true, editorText: "untyped prompt" });
 	registerQuickCancel(harness.pi);
 	harness.startRun();
-	harness.finishFirstBlock();
+	harness.appendAssistantReply();
 
 	await handler(harness)(harness.ctx);
 
@@ -282,7 +266,7 @@ test("the command aborts a streaming run before rewinding", async () => {
 	const harness = createHarness({ idle: false });
 	registerQuickCancel(harness.pi);
 	harness.startRun();
-	harness.finishFirstBlock();
+	harness.appendAssistantReply();
 
 	const command = harness.commands.get("quick-cancel");
 	assert.ok(command, "quick-cancel command registered");

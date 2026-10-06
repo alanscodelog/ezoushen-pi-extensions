@@ -3,29 +3,17 @@ import { announce } from "../../shared/announce.ts";
 import { resolveSettings, type SettingsRuntime } from "../../shared/settings.ts";
 
 /**
- * `ctrl+alt+x`. `ctrl`+`alt`+a letter is sent as a distinct escape sequence by
- * terminals, so it does not collide with the free letters and is not stripped
- * like `ctrl+shift+x` (which most terminals deliver as `ctrl+x`, colliding with
- * pi's built-in shortcut). Binding it to `escape` (no modifier) would collide
- * with pi's built-in interrupt and be skipped, so it is not the default.
+ * Default shortcut: `ctrl+alt+x`. A distinct escape sequence, no collision with
+ * pi's built-ins, and not strippable the way `ctrl+shift+x` collapses to
+ * `ctrl+x`. `escape` itself is pi's interrupt and would be skipped.
  *
- * Note: the terminal must actually transmit the `ctrl`+`alt` combo in a form pi
- * can parse. Verified against one runtime that sends legacy sequences: it
- * delivers `ctrl+alt+x` as `ESC`+`0x18`, which pi does not bind (and
- * `alt+escape` arrives as the ambiguous double-`ESC`, also unbindable) — but
- * `alt`+`letter` (classic `ESC`+letter meta form) fires fine. Users whose
- * terminal can't passthrough `ctrl+alt` can set `PI_QUICK_CANCEL_KEY` to a key
- * their terminal sends distinctly (e.g. `alt+x`), or use the `quick-cancel`
- * slash command instead.
+ * The terminal must actually transmit the combo — see the README for the
+ * verified matrix (legacy `ctrl+alt` and `alt+escape` are unbindable;
+ * `alt+letter` works). Overridable via `PI_QUICK_CANCEL_KEY`.
  */
 const DEFAULT_KEY = "ctrl+alt+x";
 const KEY_SETTING = { key: { default: DEFAULT_KEY, env: "PI_QUICK_CANCEL_KEY" } } as const;
 type ShortcutKey = Parameters<ExtensionAPI["registerShortcut"]>[0];
-
-/** The prompt that triggered the most recent run, captured so it can be returned. */
-interface CapturedPrompt {
-	text: string;
-}
 
 /** Minimal structural view of the session entries the rewind needs. */
 interface SessionEntryLike {
@@ -68,12 +56,12 @@ function contentText(content: unknown): string {
  * back to the newest user message entry, which is the prompt of the run that
  * just ended unless something was queued mid-run.
  */
-function findPromptEntryId(sm: { getEntries(): SessionEntryLike[] }, prompt: string | undefined): string | undefined {
+function findPromptEntryId(sm: ReadableSessionManager, prompt: string | null): string | undefined {
 	const entries = sm.getEntries();
 	for (let i = entries.length - 1; i >= 0; i--) {
 		const entry = entries[i];
 		if (entry.type !== "message" || entry.message?.role !== "user") continue;
-		if (prompt === undefined || contentText(entry.message.content).trim() === prompt.trim()) return entry.id;
+		if (prompt === null || contentText(entry.message.content).trim() === prompt.trim()) return entry.id;
 	}
 	return undefined;
 }
@@ -93,11 +81,11 @@ export default function registerQuickCancel(
 	let warnedAboutKey = false;
 
 	/**
-	 * The prompt captured from the last `before_agent_start`, kept until the
-	 * run settles so a quick cancel can find the exchange to rewind. `null`
-	 * when there is no recently started run.
+	 * The prompt of the most recent run, captured so the rewind can find its
+	 * exchange. `null` once the run settles — a later idle press then falls
+	 * back to the newest user message entry instead of a stale match.
 	 */
-	let captured: CapturedPrompt | null = null;
+	let captured: string | null = null;
 
 	pi.on("session_start", (_event, ctx) => {
 		if (!validKey && !warnedAboutKey) {
@@ -110,11 +98,9 @@ export default function registerQuickCancel(
 	// template expansion) so the rewind can find the exchange even though the
 	// editor has cleared.
 	pi.on("before_agent_start", (event) => {
-		captured = { text: event.prompt };
+		captured = event.prompt;
 	});
 
-	// The run is over: drop the capture so a later idle press rewinds the newest
-	// exchange (the fallback in findPromptEntryId) rather than a stale one.
 	pi.on("agent_end", () => {
 		captured = null;
 	});
@@ -126,7 +112,7 @@ export default function registerQuickCancel(
 	 * disappears immediately), and restores the prompt to the editor.
 	 */
 	const rewind = async (ctx: ExtensionCommandContext): Promise<void> => {
-		const prompt = captured?.text;
+		const prompt = captured;
 		if (!ctx.isIdle()) {
 			// An active run: cancel it, then wait for the loop to settle —
 			// navigateTree refuses to run mid-stream.
@@ -157,33 +143,11 @@ export default function registerQuickCancel(
 		handler: (_args, ctx) => rewind(ctx),
 	});
 
+	// The shortcut is the command: only the command context can reach the
+	// transcript UI, and dispatching through sendUserMessage works even
+	// mid-stream (extension commands run before the streaming check in prompt()).
 	pi.registerShortcut(key, {
 		description: "Rewind the chat to before the prompt (cancels the run)",
-		handler: async (ctx) => {
-			// Delegate to the command: it is the only path that can reach the
-			// transcript UI, and dispatching it through sendUserMessage works
-			// even mid-stream (extension commands run before the streaming
-			// check in prompt()).
-			if (typeof pi.sendUserMessage === "function") {
-				await pi.sendUserMessage("/quick-cancel", { expandPromptTemplates: true });
-				return;
-			}
-			// Fallback for hosts without command dispatch: cancel + editor only.
-			const text = captured?.text ?? ctx.ui?.getEditorText?.();
-			if (!ctx.isIdle()) {
-				ctx.abort();
-				if (text) {
-					ctx.ui?.setEditorText?.(text);
-					announce(ctx, "pi-quick-cancel: cancelled; prompt returned to editor", "info");
-				} else {
-					announce(ctx, "pi-quick-cancel: cancelled", "info");
-				}
-			} else if (text) {
-				ctx.ui?.setEditorText?.(text);
-				announce(ctx, "pi-quick-cancel: prompt returned to editor", "info");
-			} else {
-				announce(ctx, "pi-quick-cancel: nothing to cancel", "info");
-			}
-		},
+		handler: () => pi.sendUserMessage("/quick-cancel", { expandPromptTemplates: true }),
 	});
 }
