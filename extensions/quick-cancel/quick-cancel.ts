@@ -3,14 +3,14 @@ import { announce } from "../../shared/announce.ts";
 import { resolveSettings, type SettingsRuntime } from "../../shared/settings.ts";
 
 /**
- * `escape` is also pi's built-in interrupt. Binding this shortcut to it makes
- * one keypress do both halves of what a user would otherwise do by hand:
- * cancel the running turn (the built-in interrupt) and — when it is safe —
- * return the prompt to the editor so it never has to be unwound from the
- * transcript by hand. The handler always calls `ctx.abort()` itself, so the
- * behaviour is correct no matter what key the user binds it to.
+ * `ctrl+alt+x`. `ctrl`+`alt`+a letter is sent as a distinct escape sequence by
+ * terminals, so it does not collide with the free letters and is not stripped
+ * like `ctrl+shift+x` (which most terminals deliver as `ctrl+x`, colliding with
+ * pi's built-in shortcut). The handler always calls `ctx.abort()` itself, so it
+ * works regardless of the key. Binding it to `escape` would collide with the
+ * built-in interrupt and be skipped by pi, so it is not the default.
  */
-const DEFAULT_KEY = "escape";
+const DEFAULT_KEY = "ctrl+alt+x";
 const KEY_SETTING = { key: { default: DEFAULT_KEY, env: "PI_QUICK_CANCEL_KEY" } } as const;
 type ShortcutKey = Parameters<ExtensionAPI["registerShortcut"]>[0];
 
@@ -55,7 +55,7 @@ export default function registerQuickCancel(
 
 	pi.on("session_start", (_event, ctx) => {
 		if (!validKey && !warnedAboutKey) {
-			announce(ctx, "pi-quick-cancel: invalid key setting; using escape", "warning", "pi-quick-cancel:invalid-key");
+			announce(ctx, "pi-quick-cancel: invalid key setting; using ctrl+alt+x", "warning", "pi-quick-cancel:invalid-key");
 			warnedAboutKey = true;
 		}
 	});

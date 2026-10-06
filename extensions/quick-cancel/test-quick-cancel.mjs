@@ -111,7 +111,7 @@ function createHarness({
 	};
 }
 
-const handler = (harness) => harness.shortcuts.get("escape").handler;
+const handler = (harness) => harness.shortcuts.get("ctrl+alt+x").handler;
 
 test("early cancel during a streaming run returns the prompt to the editor", async () => {
 	const harness = createHarness({ idle: false });
@@ -241,14 +241,14 @@ test("non-interactive mode announces to stderr and never touches the editor", as
 	assert.match(lines[0], /cancelled before the first response finished/);
 });
 
-test("invalid key setting uses escape and warns once", () => {
+test("invalid key setting uses ctrl+alt+x and warns once", () => {
 	const agentDir = mkdtempSync(join(tmpdir(), "pi-quick-cancel-invalid-"));
 	try {
 		writeFileSync(join(agentDir, "pi-quick-cancel.json"), JSON.stringify({ key: "not-a-key" }));
 		const harness = createHarness();
 		registerQuickCancel(harness.pi, { agentDir, environment: {} });
 
-		assert.equal(harness.shortcuts.has("escape"), true);
+		assert.equal(harness.shortcuts.has("ctrl+alt+x"), true);
 		harness.emit("session_start", {});
 		harness.emit("session_start", {});
 		assert.equal(harness.notifications.length, 1);
@@ -258,7 +258,7 @@ test("invalid key setting uses escape and warns once", () => {
 	}
 });
 
-test("a custom key setting replaces the default escape binding", () => {
+test("a custom key setting replaces the default ctrl+alt+x binding", () => {
 	const agentDir = mkdtempSync(join(tmpdir(), "pi-quick-cancel-key-"));
 	try {
 		writeFileSync(join(agentDir, "pi-quick-cancel.json"), JSON.stringify({ key: "ctrl+shift+k" }));
@@ -266,7 +266,7 @@ test("a custom key setting replaces the default escape binding", () => {
 		registerQuickCancel(harness.pi, { agentDir, environment: {} });
 
 		assert.equal(harness.shortcuts.has("ctrl+shift+k"), true);
-		assert.equal(harness.shortcuts.has("escape"), false);
+		assert.equal(harness.shortcuts.has("ctrl+alt+x"), false);
 	} finally {
 		rmSync(agentDir, { recursive: true, force: true });
 	}
@@ -275,7 +275,7 @@ test("a custom key setting replaces the default escape binding", () => {
 test("a captured prompt is returned to the editor when bound to a custom key", async () => {
 	const harness = createHarness({ idle: false });
 	registerQuickCancel(harness.pi, { agentDir: undefined, environment: {} });
-	harness.shortcuts.set("ctrl+shift+k", harness.shortcuts.get("escape"));
+	harness.shortcuts.set("ctrl+shift+k", harness.shortcuts.get("ctrl+alt+x"));
 
 	harness.startRun();
 	await harness.shortcuts.get("ctrl+shift+k").handler(harness.ctx);

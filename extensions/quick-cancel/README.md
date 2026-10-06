@@ -12,9 +12,9 @@ pi install npm:pi-quick-cancel
 
 ## What it does
 
-The default shortcut is `escape`, pi's built-in interrupt. Pressing it while a
-turn is running cancels the run (the built-in interrupt does the same thing) and
-then, depending on how far the run got, decides what to do with your prompt:
+The default shortcut is `ctrl+alt+x`. Pressing it while a turn is running calls
+`abort()` to cancel the run and then, depending on how far the run got, decides
+what to do with your prompt:
 
 - **Nothing output yet, or the first response is still streaming** — the run was
   cancelled before it produced anything you would want to keep, so the extension
@@ -32,16 +32,27 @@ ended without output), the run is treated as unfinished and the prompt is
 returned. Once the first assistant block has fully ended, the prompt is treated
 as finished output and only the run is cancelled.
 
-The terminal must actually send `escape` for this shortcut to fire.
+### Why `ctrl+alt+x`
+
+This extension registers its own shortcut that must actually fire. `escape` is
+already pi's built-in interrupt, so binding this to it is **skipped by pi** — the
+extension's handler would never be registered, and the shortcut would silently
+do nothing. `ctrl+alt+x` avoids that: `ctrl`+`alt`+a letter is delivered as a
+distinct escape sequence by terminals (so it does not collide with a free
+letter, and is not stripped like `ctrl+shift+x` would be to `ctrl+x`). Bind
+another key with the `key` setting if you prefer.
 
 ## External contract
 
-One shortcut binds to the run (default `escape`, or `key` / `PI_QUICK_CANCEL_KEY`).
-While pi is not idle the handler calls `abort()` to stop the turn and captures the
-prompt from `before_agent_start`. It observes `message_start` and `message_end` to
-detect when the first assistant response has fully streamed, and returns the prompt to the editor while the first response is unfinished. If that response has already
-finished, the prompt already belongs to the transcript, so only the run is
-cancelled and the prompt is left in the transcript.
+One shortcut binds to the run (default `ctrl+alt+x`, or `key` /
+`PI_QUICK_CANCEL_KEY`). While pi is not idle the handler calls `abort()` to stop
+the turn and captures the prompt from `before_agent_start`. It observes
+`message_start` and `message_end` to detect when the first assistant response has fully streamed, and returns the prompt to the editor while the first response is unfinished. If that response has already finished, the prompt already belongs to
+the transcript, so only the run is cancelled and the prompt is left in the
+transcript.
+
+The terminal must actually send `ctrl+alt+x` for this shortcut to fire; a terminal
+without the kitty keyboard protocol may send the legacy `ESC` sequence instead.
 
 ## Settings
 
@@ -50,19 +61,15 @@ Set `key` in `pi-quick-cancel.json` in the Pi agent settings directory, or use
 
 | setting | default | environment variable | purpose |
 |---|---|---|---|
-| `key` | `escape` | `PI_QUICK_CANCEL_KEY` | Shortcut with one or more modifiers and a letter, digit, or named key. |
+| `key` | `ctrl+alt+x` | `PI_QUICK_CANCEL_KEY` | Shortcut with one or more modifiers and a letter, digit, or named key. |
 
 For example:
 
 ```json
 {
-  "key": "ctrl+shift+g"
+  "key": "ctrl+alt+e"
 }
 ```
-
-The extension always calls `abort()` itself, so it works regardless of which
-key it is bound to. Binding it to `escape` (the default) simply pairs it with
-the built-in interrupt for a single-key cancel-and-return.
 
 ## Limitations
 
@@ -72,4 +79,7 @@ are not returned — re-attach them when you resend.
 
 ## If the contract is unmet
 
-An invalid `key` falls back to `escape` and warns once per session.
+An invalid `key` falls back to `ctrl+alt+x` and warns once per session. If a key
+is bound to a key pi already uses (such as `escape` or `ctrl+x`), pi skips the
+extension's shortcut, so the shortcut never fires — pick a key that does not
+conflict with a built-in.
