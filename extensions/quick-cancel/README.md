@@ -16,11 +16,8 @@ The default shortcut is `ctrl+alt+x`. Pressing it while a turn is running
 cancels the run (`abort()`), returns the prompt to the editor, and once the
 aborted loop has settled, rewinds the session tree so the canonical chat
 history ends just before the prompt: the user message and any assistant output
-the run produced drop out of the context entirely.
-
-- The prompt is restored to the editor immediately, so you can edit or resend it.
-- The exchange is removed from the session the moment the loop settles
-  (`agent_end`), so the next prompt is sent against the pre-prompt history.
+the run produced drop out of the context entirely — no matter how far the run
+got before you pressed it.
 
 When pi is idle there is nothing to cancel: the extension best-effort returns
 whatever prompt it can to the editor, and otherwise reports "nothing to cancel".
@@ -50,11 +47,10 @@ another key with the `key` setting if you prefer.
 
 One shortcut binds to the run (default `ctrl+alt+x`, or `key` /
 `PI_QUICK_CANCEL_KEY`). While pi is not idle the handler calls `abort()` to stop
-the turn and captures the prompt from `before_agent_start`. It observes
-`message_start` and `message_end` to detect how far the run got, and
-returns the prompt to the editor while the first response is unfinished. When
-the run settles, the session is rewound to just before the prompt either way —
-the exchange leaves the canonical history, not just the editor.
+the turn and captures the prompt from `before_agent_start`. It restores the
+prompt to the editor and, when the run settles, rewinds the session to just
+before the prompt — the exchange leaves the canonical history, not just the
+editor, so the next prompt is sent against the pre-prompt history.
 
 The `quick-cancel` command performs the same rewind through pi's tree
 navigation, which also rebuilds the visible transcript.

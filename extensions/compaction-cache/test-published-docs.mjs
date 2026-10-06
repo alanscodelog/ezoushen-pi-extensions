@@ -78,7 +78,7 @@ const packageRequirements = {
 	"pi-quick-cancel": [
 		"| `key` | `ctrl+alt+x` |",
 		"`PI_QUICK_CANCEL_KEY`",
-		"returns the prompt to the editor while the first response is unfinished",
+		"rewind the chat to before the prompt was sent",
 	],
 };
 

@@ -112,10 +112,6 @@ export default function registerQuickCancel(
 	 * there is no run whose prompt can be returned.
 	 */
 	let captured: CapturedPrompt | null = null;
-	/** Whether the first assistant response block has fully ended. While false
-	 * there is nothing to lose (nothing output yet, or the first block is still
-	 * streaming), so cancelling can safely return the prompt to the editor. */
-	let firstAssistantEnded = false;
 	/** Set when the shortcut cancelled a run: the session tree is rewound to
 	 * just before the prompt once the aborted loop settles (`agent_end`). */
 	let pendingRewind = false;
@@ -136,17 +132,7 @@ export default function registerQuickCancel(
 	// template expansion) so it can be restored even if the editor has cleared.
 	pi.on("before_agent_start", (event) => {
 		captured = { text: event.prompt };
-		firstAssistantEnded = false;
 		pendingRewind = false;
-	});
-
-	// The first assistant block has fully streamed: after this point cancelling
-	// keeps the prompt in the transcript (there is output to preserve) rather than
-	// returning it to the editor.
-	pi.on("message_end", (event) => {
-		if (event.message.role === "assistant" && !firstAssistantEnded) {
-			firstAssistantEnded = true;
-		}
 	});
 
 	// The run is over: if a quick cancel asked for a rewind, drop the exchange
@@ -162,7 +148,6 @@ export default function registerQuickCancel(
 			}
 		}
 		captured = null;
-		firstAssistantEnded = false;
 		pendingRewind = false;
 	});
 
@@ -188,17 +173,15 @@ export default function registerQuickCancel(
 			}
 
 			// An active run is in flight: cancel it (the "esc" half) and restore
-			// the prompt to the editor immediately. The session tree rewind itself
-			// happens on `agent_end`, once the aborted loop has finished writing.
+			// the prompt to the editor immediately, no matter how far the run got —
+			// the whole exchange is rewound, so there is nothing to preserve in the
+			// transcript. The session tree rewind itself happens on `agent_end`, once
+			// the aborted loop has finished writing.
 			ctx.abort();
 			if (text) {
 				ctx.ui?.setEditorText?.(text);
 				pendingRewind = true;
-				if (!firstAssistantEnded) {
-					announce(ctx, "pi-quick-cancel: cancelling; prompt returned to editor, chat will rewind to before the prompt", "info");
-				} else {
-					announce(ctx, "pi-quick-cancel: cancelled; chat will rewind to before the prompt", "info");
-				}
+				announce(ctx, "pi-quick-cancel: cancelling; prompt returned to editor, chat will rewind to before the prompt", "info");
 			} else {
 				announce(ctx, "pi-quick-cancel: cancelled", "info");
 			}

@@ -232,7 +232,10 @@ test("cancel rewinds the chat to before the prompt once the run settles", async 
 	assert.match(harness.notifications.at(-1).message, /rewound to before the prompt/i);
 });
 
-test("cancel after the first block finished returns the prompt and rewinds", async () => {
+test("cancel works the same no matter how far the run got", async () => {
+	// With the rewind in place there is nothing to preserve in the transcript:
+	// even after the first response fully streamed, the prompt is restored and
+	// the whole exchange is queued for removal from the history.
 	const harness = createHarness({ idle: false });
 	registerQuickCancel(harness.pi);
 	harness.startRun();
@@ -241,22 +244,9 @@ test("cancel after the first block finished returns the prompt and rewinds", asy
 	await handler(harness)(harness.ctx);
 
 	assert.equal(harness.calls.filter((c) => c === "abort").length, 1);
-	// The prompt is restored to the editor and the exchange is queued for rewind.
-	assert.equal(harness.editorText, "answer my question");
-	assert.match(harness.notifications[0].message, /chat will rewind/i);
-});
-
-test("a run that produced no output at all is treated as unfinished", async () => {
-	// No assistant message_end was emitted, so the first block is unfinished.
-	const harness = createHarness({ idle: false });
-	registerQuickCancel(harness.pi);
-	harness.startRun();
-	// note: finishFirstBlock() is NOT called
-
-	await handler(harness)(harness.ctx);
-
 	assert.equal(harness.editorText, "answer my question");
 	assert.match(harness.notifications[0].message, /prompt returned to editor/i);
+	assert.match(harness.notifications[0].message, /chat will rewind/i);
 });
 
 test("idle press with no run just reports nothing to cancel", async () => {
