@@ -1,9 +1,9 @@
 # pi-extensions
 
-Seven extensions for the [pi coding agent](https://pi.dev), published from one
+Eight extensions for the [pi coding agent](https://pi.dev), published from one
 repository.
 
-Three help long-running sessions reuse context. Three help you steer a run, see
+Three help long-running sessions reuse context. Four help you steer a run, see
 what it cost, and keep a draft prompt safe. One puts images on the wire.
 
 | package | what it does |
@@ -13,6 +13,7 @@ what it cost, and keep a draft prompt safe. One puts images on the wire.
 | [`pi-cmem`](extensions/cmem) | Bridges pi to a [claude-mem](https://github.com/thedotmack/claude-mem) worker over its HTTP API, so pi sessions share one memory namespace with other agents working in the same repository. |
 | [`pi-focus-mode`](extensions/focus-mode) | Keeps the transcript focused by folding thinking and tool calls into progress lines and block titles, with exchange stats in the status line and summary card. |
 | [`pi-interrupt-steer`](extensions/interrupt-steer) | Interrupts a running turn and sends the editor text as one new user message. |
+| [`pi-quick-cancel`](extensions/quick-cancel) | Cancels a running turn and, while the first response is unfinished, returns the prompt to the editor. |
 | [`pi-prompt-drafts`](extensions/prompt-drafts) | Ctrl+S draft queue for the prompt editor: save a draft with a keypress and get it back when your next prompt is sent, or with the same key. |
 | [`pi-image-thumbnails`](extensions/image-thumbnails) | Image thumbnails for the prompt editor: pasted paths, `[Image #1]`, markdown, and `file://` URLs become real image blocks on send plus aspect-fill attachment thumbnails while you type. |
 
@@ -24,6 +25,7 @@ pi install npm:pi-compaction-cache
 pi install npm:pi-cmem
 pi install npm:pi-focus-mode
 pi install npm:pi-interrupt-steer
+pi install npm:pi-quick-cancel
 pi install npm:pi-prompt-drafts
 pi install npm:pi-image-thumbnails
 ```
@@ -63,6 +65,7 @@ package name:
 | `pi-cmem` | `pi-cmem.json` |
 | `pi-focus-mode` | `focus-mode.json` |
 | `pi-interrupt-steer` | `pi-interrupt-steer.json` |
+| `pi-quick-cancel` | `pi-quick-cancel.json` |
 | `pi-prompt-drafts` | `pi-prompt-drafts.json` |
 | `pi-image-thumbnails` | `pi-image-thumbnails.json` |
 

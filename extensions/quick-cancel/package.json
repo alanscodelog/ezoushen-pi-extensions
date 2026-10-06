@@ -1,0 +1,37 @@
+{
+  "name": "pi-quick-cancel",
+  "version": "0.1.0",
+  "description": "Cancel a running turn and, while the first response is unfinished, return the prompt to the editor.",
+  "type": "module",
+  "main": "./quick-cancel.js",
+  "exports": "./quick-cancel.js",
+  "files": [
+    "quick-cancel.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "pi-package"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ezoushen/pi-extensions.git",
+    "directory": "extensions/quick-cancel"
+  },
+  "homepage": "https://github.com/ezoushen/pi-extensions/tree/main/extensions/quick-cancel#readme",
+  "bugs": {
+    "url": "https://github.com/ezoushen/pi-extensions/issues"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./quick-cancel.js"
+    ]
+  }
+}

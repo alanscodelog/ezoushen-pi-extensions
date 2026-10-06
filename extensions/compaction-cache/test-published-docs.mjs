@@ -75,6 +75,11 @@ const packageRequirements = {
 		"| `rows` | `4` | `PI_IMAGE_THUMBS_ROWS` |",
 		"no image is attached",
 	],
+	"pi-quick-cancel": [
+		"| `key` | `escape` |",
+		"`PI_QUICK_CANCEL_KEY`",
+		"returns the prompt to the editor while the first response is unfinished",
+	],
 };
 
 function filesUnder(root) {
@@ -163,7 +168,7 @@ test("packed tarballs and git-tracked source contain no private deployment ident
 test("every packed package documents its contract, settings, and unmet behavior", () => {
 	const { temp, packages } = packAll();
 	try {
-		assert.equal(packages.length, 7);
+		assert.equal(packages.length, 8);
 		for (const packed of packages) {
 			const readme = readFileSync(join(packed.root, "README.md"), "utf8");
 			assert.match(readme, /^## External contract$/m, packed.name);
