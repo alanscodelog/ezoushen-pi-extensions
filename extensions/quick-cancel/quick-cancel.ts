@@ -10,10 +10,14 @@ import { resolveSettings, type SettingsRuntime } from "../../shared/settings.ts"
  * works regardless of the key. Binding it to `escape` (no modifier) would
  * collide with pi's built-in interrupt and be skipped, so it is not the default.
  *
- * Note: the terminal must actually transmit the `ctrl`+`alt` combo (some
- * runtimes drop it). Users whose terminal can't passthrough it can set
- * `PI_QUICK_CANCEL_KEY` to any key their terminal sends distinctly, or use the
- * `quick-cancel` slash command instead.
+ * Note: the terminal must actually transmit the `ctrl`+`alt` combo in a form pi
+ * can parse. Verified against one runtime that sends legacy sequences: it
+ * delivers `ctrl+alt+x` as `ESC`+`0x18`, which pi does not bind (and
+ * `alt+escape` arrives as the ambiguous double-`ESC`, also unbindable) — but
+ * `alt`+`letter` (classic `ESC`+letter meta form) fires fine. Users whose
+ * terminal can't passthrough `ctrl+alt` can set `PI_QUICK_CANCEL_KEY` to a key
+ * their terminal sends distinctly (e.g. `alt+x`), or use the `quick-cancel`
+ * slash command instead.
  */
 const DEFAULT_KEY = "ctrl+alt+x";
 const KEY_SETTING = { key: { default: DEFAULT_KEY, env: "PI_QUICK_CANCEL_KEY" } } as const;

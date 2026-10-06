@@ -56,7 +56,10 @@ The `quick-cancel` command performs the same rewind through pi's tree
 navigation, which also rebuilds the visible transcript.
 
 The terminal must actually send `ctrl+alt+x` for this shortcut to fire; a terminal
-without the kitty keyboard protocol may send the legacy `ESC` sequence instead.
+without the kitty keyboard protocol may send the legacy `ESC` sequence instead,
+which pi does not bind. Verified against one such runtime: `alt+<letter>` (the
+classic `ESC`+letter meta form) fires fine, while `alt+escape` arrives as an
+ambiguous double-`ESC` and cannot be bound at all.
 
 ## Settings
 
