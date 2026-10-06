@@ -76,7 +76,7 @@ const packageRequirements = {
 		"no image is attached",
 	],
 	"pi-quick-cancel": [
-		"| `key` | `escape` |",
+		"| `key` | `ctrl+alt+x` |",
 		"`PI_QUICK_CANCEL_KEY`",
 		"returns the prompt to the editor while the first response is unfinished",
 	],

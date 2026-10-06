@@ -3,12 +3,20 @@ import { announce } from "../../shared/announce.ts";
 import { resolveSettings, type SettingsRuntime } from "../../shared/settings.ts";
 
 /**
- * `ctrl+alt+x`. `ctrl`+`alt`+a letter is sent as a distinct escape sequence by
- * terminals, so it does not collide with the free letters and is not stripped
- * like `ctrl+shift+x` (which most terminals deliver as `ctrl+x`, colliding with
- * pi's built-in shortcut). The handler always calls `ctx.abort()` itself, so it
- * works regardless of the key. Binding it to `escape` would collide with the
- * built-in interrupt and be skipped by pi, so it is not the default.
+ * `alt+escape`. Most terminals send an `alt`-prefixed key as a two-byte escape
+ * sequence (`ESC` + the key), which is distinct and does not collide with the
+ * many single-byte `ctrl`+`letter` editor bindings, so the shortcut survives
+ * editor readline. Some runtimes do not passthrough `ctrl`+`alt` combos at all
+ * (the combo is dropped before it reaches pi), but they do passthrough `alt`
+ * alone — which is why `alt+escape` is the default here rather than a `ctrl`
+ * combination. The handler always calls `ctx.abort()` itself, so it works
+ * regardless of the key. Binding it to `escape` (no modifier) would collide with
+ * pi's built-in interrupt and be skipped, so it is not the default.
+ *
+ * Note: `ctrl+alt+x` only fires if the terminal actually transmits the
+ * `ctrl`+`alt` combo (many runtimes drop it — that's why `alt+escape` was tried
+ * as an alternative). Users whose terminal can't passthrough it can set
+ * `PI_QUICK_CANCEL_KEY` to any key their terminal transmits (e.g. `alt+escape`).
  */
 const DEFAULT_KEY = "ctrl+alt+x";
 const KEY_SETTING = { key: { default: DEFAULT_KEY, env: "PI_QUICK_CANCEL_KEY" } } as const;
