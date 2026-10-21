@@ -71,7 +71,10 @@ export default function footer(pi: ExtensionAPI): void {
 		const branch = gitBranch;
 		if (!branch) return undefined;
 		if (!force && prCache?.branch === branch) return prCache.prNumber;
-		const output = await runGh(cwd).catch(() => "");
+		const output = await runGh(cwd).catch((error: unknown) => {
+			if (isNoPullRequestError(error)) return "";
+			throw error;
+		});
 		if (generation !== gitRefreshGeneration || footerDisposed || branch !== gitBranch) return undefined;
 		const prNumber = parsePrNumber(output);
 		prCache = { branch, prNumber };
@@ -234,6 +237,13 @@ async function runGh(cwd: string): Promise<string> {
 		timeout: GIT_COMMAND_TIMEOUT_MS,
 	});
 	return typeof output === "string" ? output : output.stdout;
+}
+
+function isNoPullRequestError(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false;
+	const details = error as { message?: unknown; stderr?: unknown };
+	const text = [details.message, details.stderr].filter((value): value is string => typeof value === "string").join("\n");
+	return /no (?:open )?pull requests found for branch\b/i.test(text);
 }
 
 function parsePrNumber(output: string): number | undefined {

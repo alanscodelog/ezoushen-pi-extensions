@@ -111,7 +111,9 @@ test("a no-PR result is cached until the branch changes", async (t) => {
 	const process = stubExecFile(new Map([
 		["git status --porcelain", ""],
 		["git diff HEAD --numstat", ""],
-		["gh pr view --json number --jq .number", [new Error("no PR for this branch"), "84"]],
+		["gh pr view --json number --jq .number", [Object.assign(new Error("Command failed"), {
+			stderr: 'no pull requests found for branch "feature/worktree"',
+		}), "84"]],
 	]));
 	try {
 		const mounted = await mount();
@@ -129,6 +131,31 @@ test("a no-PR result is cached until the branch changes", async (t) => {
 		await new Promise((resolve) => setImmediate(resolve));
 		assert.equal(process.calls.filter(({ file }) => file === "gh").length, 2);
 		assert.match(mounted.renderer.render(120).join("\n"), /feature\/next \(#84\)/);
+	} finally {
+		process.restore();
+		t.mock.timers.reset();
+	}
+});
+
+test("a failed PR lookup is retried on the next refresh", async (t) => {
+	t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+	const process = stubExecFile(new Map([
+		["git status --porcelain", ""],
+		["git diff HEAD --numstat", ""],
+		["gh pr view --json number --jq .number", [Object.assign(new Error("Command failed"), {
+			stderr: "temporary GitHub API failure",
+		}), "84"]],
+	]));
+	try {
+		const mounted = await mount();
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.equal(process.calls.filter(({ file }) => file === "gh").length, 1);
+
+		await mounted.handlers.get("tool_result")({}, mounted.ctx);
+		t.mock.timers.tick(1_000);
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.equal(process.calls.filter(({ file }) => file === "gh").length, 2);
+		assert.match(mounted.renderer.render(120).join("\n"), /feature\/worktree \(#84\)/);
 	} finally {
 		process.restore();
 		t.mock.timers.reset();
