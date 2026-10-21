@@ -39,6 +39,10 @@ function stubGit(outputs) {
 	const calls = [];
 	const original = childProcess.execFile;
 	childProcess.execFile = (file, args, options, callback) => {
+		if (file !== "git") {
+			callback(new Error("non-git command not configured in git-status fixture"), "", "");
+			return {};
+		}
 		calls.push({ file, args, options });
 		callback(null, outputs.get(args.join(" ")) ?? "", "");
 		return {};
@@ -58,6 +62,10 @@ function stubDeferredGit() {
 	const pending = [];
 	const original = childProcess.execFile;
 	childProcess.execFile = (file, args, options, callback) => {
+		if (file !== "git") {
+			callback(new Error("non-git command not configured in git-status fixture"), "", "");
+			return {};
+		}
 		const call = { file, args, options, callback };
 		calls.push(call);
 		pending.push(call);
@@ -232,8 +240,9 @@ test("a failed git lookup leaves the footer renderable", async () => {
 	const onUnhandledRejection = (error) => unhandledRejections.push(error);
 	const original = childProcess.execFile;
 	childProcess.execFile = (file, args, options, callback) => {
-		calls.push({ file, args, options });
-		queueMicrotask(() => callback(new Error("git unavailable"), "", ""));
+		if (file === "git") calls.push({ file, args, options });
+		const message = file === "git" ? "git unavailable" : "gh unavailable";
+		queueMicrotask(() => callback(new Error(message), "", ""));
 		return {};
 	};
 	syncBuiltinESMExports();

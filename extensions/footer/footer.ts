@@ -15,6 +15,7 @@ type GitInfo = {
 	changedFiles: number;
 	added: number;
 	deleted: number;
+	prNumber?: number;
 };
 
 export default function footer(pi: ExtensionAPI): void {
@@ -26,18 +27,21 @@ export default function footer(pi: ExtensionAPI): void {
 	let gitRefreshGeneration = 0;
 	let gitRefreshInFlight = false;
 	let gitRefreshQueued = false;
+	let gitRefreshForceQueued = false;
 	let lastGitRefreshAt = Number.NEGATIVE_INFINITY;
 	let gitRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 	let footerDisposed = false;
 	let gitCwd: string | undefined;
+	let gitBranch: string | undefined;
+	let prCache: { branch: string; prNumber?: number } | undefined;
 	let unsubscribeBranchChange: (() => void) | undefined;
 
-	const startGitRefresh = (generation: number, cwd: string) => {
+	const startGitRefresh = (generation: number, cwd: string, forcePr = false) => {
 		gitRefreshInFlight = true;
 		lastGitRefreshAt = Date.now();
-		void refreshGit(cwd).then((info) => {
+		void Promise.all([refreshGit(cwd), refreshPr(cwd, forcePr, generation)]).then(([info, prNumber]) => {
 			if (generation !== gitRefreshGeneration || footerDisposed) return;
-			gitInfo = info;
+			gitInfo = { ...info, prNumber };
 			requestRender?.();
 		}).catch(() => {}).finally(() => {
 			gitRefreshInFlight = false;
@@ -52,7 +56,9 @@ export default function footer(pi: ExtensionAPI): void {
 			gitRefreshTimer = undefined;
 			if (!gitRefreshQueued || footerDisposed) return;
 			gitRefreshQueued = false;
-			startGitRefresh(gitRefreshGeneration, gitCwd ?? fallbackCwd);
+			const forcePr = gitRefreshForceQueued;
+			gitRefreshForceQueued = false;
+			startGitRefresh(gitRefreshGeneration, gitCwd ?? fallbackCwd, forcePr);
 		};
 		if (delay === 0) {
 			startQueuedRefresh();
@@ -61,36 +67,67 @@ export default function footer(pi: ExtensionAPI): void {
 		}
 	};
 
-	const requestGitRefresh = () => {
+	const refreshPr = async (cwd: string, force: boolean, generation: number): Promise<number | undefined> => {
+		const branch = gitBranch;
+		if (!branch) return undefined;
+		if (!force && prCache?.branch === branch) return prCache.prNumber;
+		const output = await runGh(cwd).catch((error: unknown): string | undefined => {
+			if (isNoPullRequestError(error)) return "";
+			return undefined;
+		});
+		if (generation !== gitRefreshGeneration || footerDisposed || branch !== gitBranch) return undefined;
+		if (output === undefined) return prCache?.branch === branch ? prCache.prNumber : undefined;
+		const prNumber = parsePrNumber(output);
+		prCache = { branch, prNumber };
+		return prNumber;
+	};
+
+	const requestGitRefresh = (forcePr = false) => {
 		if (footerDisposed || !gitCwd) return;
 		gitRefreshGeneration += 1;
 		if (gitRefreshInFlight) {
 			gitRefreshQueued = true;
+			gitRefreshForceQueued ||= forcePr;
 			return;
 		}
 		if (Date.now() < lastGitRefreshAt + GIT_REFRESH_INTERVAL_MS) {
 			gitRefreshQueued = true;
+			gitRefreshForceQueued ||= forcePr;
 			scheduleQueuedGitRefresh(gitCwd);
 			return;
 		}
-		startGitRefresh(gitRefreshGeneration, gitCwd);
+		startGitRefresh(gitRefreshGeneration, gitCwd, forcePr);
 	};
 
 	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		gitCwd = ctx.cwd;
+		gitInfo = undefined;
+		gitBranch = undefined;
+		prCache = undefined;
 
 		ctx.ui.setFooter((tui, theme, footerData) => {
 			footerDisposed = false;
 			requestRender = () => tui.requestRender();
+			gitBranch = footerData?.getGitBranch?.();
 			unsubscribeBranchChange?.();
-			unsubscribeBranchChange = footerData?.onBranchChange?.(() => requestGitRefresh());
+			unsubscribeBranchChange = footerData?.onBranchChange?.(() => {
+				const branch = footerData?.getGitBranch?.();
+				const branchChanged = branch !== gitBranch;
+				if (branchChanged) {
+					gitBranch = branch;
+					prCache = undefined;
+					if (gitInfo) gitInfo = { ...gitInfo, prNumber: undefined };
+				}
+				requestGitRefresh(branchChanged);
+			});
 			requestGitRefresh();
 			return {
 				dispose() {
 					footerDisposed = true;
 					gitRefreshGeneration += 1;
 					gitRefreshQueued = false;
+					gitRefreshForceQueued = false;
 					if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
 					gitRefreshTimer = undefined;
 					unsubscribeBranchChange?.();
@@ -164,11 +201,15 @@ export default function footer(pi: ExtensionAPI): void {
 		footerDisposed = true;
 		gitRefreshGeneration += 1;
 		gitRefreshQueued = false;
+		gitRefreshForceQueued = false;
 		if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
 		gitRefreshTimer = undefined;
 		unsubscribeBranchChange?.();
 		unsubscribeBranchChange = undefined;
 		gitCwd = undefined;
+		gitBranch = undefined;
+		prCache = undefined;
+		gitInfo = undefined;
 		responseStartedAt = undefined;
 		liveOutputTokens = 0;
 		responseSpeed = undefined;
@@ -188,6 +229,27 @@ async function runGit(cwd: string, args: string[]): Promise<string> {
 	const execFileAsync = promisify(childProcess.execFile);
 	const output = await execFileAsync("git", args, { cwd, timeout: GIT_COMMAND_TIMEOUT_MS });
 	return typeof output === "string" ? output : output.stdout;
+}
+
+async function runGh(cwd: string): Promise<string> {
+	const execFileAsync = promisify(childProcess.execFile);
+	const output = await execFileAsync("gh", ["pr", "view", "--json", "number", "--jq", ".number"], {
+		cwd,
+		timeout: GIT_COMMAND_TIMEOUT_MS,
+	});
+	return typeof output === "string" ? output : output.stdout;
+}
+
+function isNoPullRequestError(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false;
+	const details = error as { message?: unknown; stderr?: unknown };
+	const text = [details.message, details.stderr].filter((value): value is string => typeof value === "string").join("\n");
+	return /no (?:open )?pull requests found for branch\b/i.test(text);
+}
+
+function parsePrNumber(output: string): number | undefined {
+	const prNumber = Number(output.trim());
+	return Number.isInteger(prNumber) && prNumber > 0 ? prNumber : undefined;
 }
 
 function parseGitInfo(status: string, numstat: string): GitInfo {
@@ -210,9 +272,10 @@ function formatGitSection(
 	info: GitInfo | undefined,
 ): string | undefined {
 	if (!branch) return undefined;
+	const branchText = info?.prNumber ? `${branch} (#${info.prNumber})` : branch;
 	const text = info && info.changedFiles > 0
-		? `${branch} (${info.changedFiles}) +${info.added}/-${info.deleted}`
-		: branch;
+		? `${branchText} (${info.changedFiles}) +${info.added}/-${info.deleted}`
+		: branchText;
 	return theme.fg("mdLink", text);
 }
 

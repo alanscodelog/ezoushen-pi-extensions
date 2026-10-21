@@ -1,6 +1,6 @@
 # pi-footer
 
-A compact Pi footer showing the current directory, git branch and dirty-file counts, context usage, response speed, and model display name. Git status refreshes in the background with added/deleted line counts; rendering reads its cached result.
+A compact Pi footer showing the current directory, git branch and PR number, dirty-file counts, context usage, response speed, and model display name. Git status and PR lookups refresh in the background; the PR result, including no PR, is cached for the branch, and rendering reads cached state.
 
 ## Install
 
@@ -15,4 +15,5 @@ From this package directory, run its tests with:
 ```sh
 node --test test/render.test.mjs
 node --test test/git-status.test.mjs
+node --test test/pr-lookup.test.mjs
 ```
