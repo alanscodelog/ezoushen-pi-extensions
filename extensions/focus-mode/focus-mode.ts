@@ -627,7 +627,7 @@ export function registerExchangeStats(pi: ExtensionAPI, toolComponent: typeof To
 		waitingStart = undefined;
 		activeTurn = undefined;
 		activeToolRuns = [];
-		model = ctx.model?.id ?? "unknown";
+		model = ctx.model ? ctx.model.name || ctx.model.id : "unknown";
 		stopReason = "stop";
 
 		stopLiveTimer();

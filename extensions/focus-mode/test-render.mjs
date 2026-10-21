@@ -3,7 +3,7 @@ import test from "node:test";
 
 import exchangeStats from "./focus-mode.ts";
 
-function mount() {
+function mount(model = { id: "pi-test-model" }) {
 	const handlers = new Map();
 	const entries = [];
 	const statuses = [];
@@ -25,7 +25,7 @@ function mount() {
 
 	const context = {
 		hasUI: true,
-		model: { id: "pi-test-model" },
+		model,
 		ui: { setStatus: (key, value) => statuses.push({ key, value }) },
 	};
 	return { handlers, entries, statuses, renderer: () => renderer, context };
@@ -317,6 +317,36 @@ test("an exchange renders with only Pi-provided events and context", () => {
 		assert.equal(colors.every((color) => color === "dim"), true);
 	}
 	assert.match(mounted.statuses.at(-1).value, /out 7/);
+});
+
+test("the exchange card shows the model display name, not the model id", () => {
+	const mounted = mount({ id: "pi-test-model", name: "Pi Test Model" });
+	mounted.handlers.get("session_start")({}, mounted.context);
+	mounted.handlers.get("before_agent_start")({}, mounted.context);
+	mounted.handlers.get("turn_start")({ turnIndex: 1 }, mounted.context);
+	mounted.handlers.get("turn_end")(
+		{
+			message: {
+				role: "assistant",
+				stopReason: "stop",
+				usage: {
+					input: 11,
+					output: 7,
+					reasoning: 2,
+					cacheRead: 3,
+					cacheWrite: 0,
+					totalTokens: 18,
+					cost: { total: 0.0042 },
+				},
+			},
+		},
+		mounted.context,
+	);
+	mounted.handlers.get("agent_settled")({}, mounted.context);
+
+	const rows = renderRows(mounted, mounted.entries[0].data);
+	assert.match(rows[0], /\bPi Test Model \(in 11/);
+	assert.doesNotMatch(rows[0], /pi-test-model/);
 });
 
 test("exchange card text rows use the theme's italic styling with their gray color", () => {
