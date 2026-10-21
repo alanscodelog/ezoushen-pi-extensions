@@ -1,9 +1,20 @@
 import { basename } from "node:path";
+import childProcess from "node:child_process";
+import { promisify } from "node:util";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+const GIT_COMMAND_TIMEOUT_MS = 2_500;
+const GIT_REFRESH_INTERVAL_MS = 1_000;
 
 type ResponseSpeed = {
 	tokensPerSecond?: number;
 	inProgress: boolean;
+};
+
+type GitInfo = {
+	changedFiles: number;
+	added: number;
+	deleted: number;
 };
 
 export default function footer(pi: ExtensionAPI): void {
@@ -11,14 +22,79 @@ export default function footer(pi: ExtensionAPI): void {
 	let liveOutputTokens = 0;
 	let responseSpeed: ResponseSpeed | undefined;
 	let requestRender: (() => void) | undefined;
+	let gitInfo: GitInfo | undefined;
+	let gitRefreshGeneration = 0;
+	let gitRefreshInFlight = false;
+	let gitRefreshQueued = false;
+	let lastGitRefreshAt = Number.NEGATIVE_INFINITY;
+	let gitRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+	let footerDisposed = false;
+	let gitCwd: string | undefined;
+	let unsubscribeBranchChange: (() => void) | undefined;
+
+	const startGitRefresh = (generation: number, cwd: string) => {
+		gitRefreshInFlight = true;
+		lastGitRefreshAt = Date.now();
+		void refreshGit(cwd).then((info) => {
+			if (generation !== gitRefreshGeneration || footerDisposed) return;
+			gitInfo = info;
+			requestRender?.();
+		}).catch(() => {}).finally(() => {
+			gitRefreshInFlight = false;
+			if (gitRefreshQueued) scheduleQueuedGitRefresh(cwd);
+		});
+	};
+
+	const scheduleQueuedGitRefresh = (fallbackCwd: string) => {
+		if (!gitRefreshQueued || footerDisposed || gitRefreshTimer) return;
+		const delay = Math.max(0, lastGitRefreshAt + GIT_REFRESH_INTERVAL_MS - Date.now());
+		const startQueuedRefresh = () => {
+			gitRefreshTimer = undefined;
+			if (!gitRefreshQueued || footerDisposed) return;
+			gitRefreshQueued = false;
+			startGitRefresh(gitRefreshGeneration, gitCwd ?? fallbackCwd);
+		};
+		if (delay === 0) {
+			startQueuedRefresh();
+		} else {
+			gitRefreshTimer = setTimeout(startQueuedRefresh, delay);
+		}
+	};
+
+	const requestGitRefresh = () => {
+		if (footerDisposed || !gitCwd) return;
+		gitRefreshGeneration += 1;
+		if (gitRefreshInFlight) {
+			gitRefreshQueued = true;
+			return;
+		}
+		if (Date.now() < lastGitRefreshAt + GIT_REFRESH_INTERVAL_MS) {
+			gitRefreshQueued = true;
+			scheduleQueuedGitRefresh(gitCwd);
+			return;
+		}
+		startGitRefresh(gitRefreshGeneration, gitCwd);
+	};
 
 	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
+		gitCwd = ctx.cwd;
 
-		ctx.ui.setFooter((tui, theme) => {
+		ctx.ui.setFooter((tui, theme, footerData) => {
+			footerDisposed = false;
 			requestRender = () => tui.requestRender();
+			unsubscribeBranchChange?.();
+			unsubscribeBranchChange = footerData?.onBranchChange?.(() => requestGitRefresh());
+			requestGitRefresh();
 			return {
 				dispose() {
+					footerDisposed = true;
+					gitRefreshGeneration += 1;
+					gitRefreshQueued = false;
+					if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
+					gitRefreshTimer = undefined;
+					unsubscribeBranchChange?.();
+					unsubscribeBranchChange = undefined;
 					requestRender = undefined;
 				},
 				invalidate() {
@@ -29,10 +105,11 @@ export default function footer(pi: ExtensionAPI): void {
 					const separator = theme.fg("borderMuted", " │ ");
 					const line = [
 						theme.fg("mdLink", dir),
+						formatGitSection(theme, footerData?.getGitBranch?.(), gitInfo),
 						formatContextSection(theme, ctx),
 						formatSpeedSection(theme, responseSpeed),
 						theme.fg("mdLink", formatModelName(ctx)),
-					].join(separator);
+					].filter((segment): segment is string => segment !== undefined).join(separator);
 					return [line];
 				},
 			};
@@ -64,6 +141,7 @@ export default function footer(pi: ExtensionAPI): void {
 	pi.on("message_end", async (event) => {
 		if (event.message.role !== "assistant") {
 			requestRender?.();
+			requestGitRefresh();
 			return;
 		}
 
@@ -77,15 +155,65 @@ export default function footer(pi: ExtensionAPI): void {
 		responseStartedAt = undefined;
 		liveOutputTokens = 0;
 		requestRender?.();
+		requestGitRefresh();
 	});
 
+	pi.on("tool_result", async () => requestGitRefresh());
 	pi.on("model_select", async () => requestRender?.());
 	pi.on("session_shutdown", async () => {
+		footerDisposed = true;
+		gitRefreshGeneration += 1;
+		gitRefreshQueued = false;
+		if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
+		gitRefreshTimer = undefined;
+		unsubscribeBranchChange?.();
+		unsubscribeBranchChange = undefined;
+		gitCwd = undefined;
 		responseStartedAt = undefined;
 		liveOutputTokens = 0;
 		responseSpeed = undefined;
 		requestRender = undefined;
 	});
+}
+
+async function refreshGit(cwd: string): Promise<GitInfo> {
+	const [status, numstat] = await Promise.all([
+		runGit(cwd, ["status", "--porcelain"]),
+		runGit(cwd, ["diff", "HEAD", "--numstat"]),
+	]);
+	return parseGitInfo(status, numstat);
+}
+
+async function runGit(cwd: string, args: string[]): Promise<string> {
+	const execFileAsync = promisify(childProcess.execFile);
+	const output = await execFileAsync("git", args, { cwd, timeout: GIT_COMMAND_TIMEOUT_MS });
+	return typeof output === "string" ? output : output.stdout;
+}
+
+function parseGitInfo(status: string, numstat: string): GitInfo {
+	const changedFiles = status.split(/\r?\n/).filter((line) => line.length > 0).length;
+	let added = 0;
+	let deleted = 0;
+	for (const line of numstat.split(/\r?\n/)) {
+		const [addedText, deletedText] = line.split("\t");
+		const addedLines = Number(addedText);
+		const deletedLines = Number(deletedText);
+		if (Number.isFinite(addedLines)) added += addedLines;
+		if (Number.isFinite(deletedLines)) deleted += deletedLines;
+	}
+	return { changedFiles, added, deleted };
+}
+
+function formatGitSection(
+	theme: ExtensionContext["ui"]["theme"],
+	branch: string | undefined,
+	info: GitInfo | undefined,
+): string | undefined {
+	if (!branch) return undefined;
+	const text = info && info.changedFiles > 0
+		? `${branch} (${info.changedFiles}) +${info.added}/-${info.deleted}`
+		: branch;
+	return theme.fg("mdLink", text);
 }
 
 function formatModelName(ctx: ExtensionContext): string {
