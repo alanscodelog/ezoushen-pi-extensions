@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import childProcess from "node:child_process";
 import { promisify } from "node:util";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const GIT_COMMAND_TIMEOUT_MS = 2_500;
@@ -147,7 +148,16 @@ export default function footer(pi: ExtensionAPI): void {
 						formatSpeedSection(theme, responseSpeed),
 						theme.fg("mdLink", formatModelName(ctx)),
 					].filter((segment): segment is string => segment !== undefined).join(separator);
-					return [line];
+					const extensionStatusLines: string[] = [];
+					for (const [label, status] of footerData?.getExtensionStatuses?.() ?? []) {
+						const prefix = `│ ${label} · `;
+						const continuationPrefix = " ".repeat(visibleWidth(prefix));
+						for (const [index, statusLine] of status.split(/\r?\n/).entries()) {
+							const linePrefix = index === 0 ? prefix : continuationPrefix;
+							extensionStatusLines.push(truncateToWidth(`${linePrefix}${statusLine}`, _width, "…"));
+						}
+					}
+					return [line, ...extensionStatusLines];
 				},
 			};
 		});
