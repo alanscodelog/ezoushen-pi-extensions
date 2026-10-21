@@ -18,7 +18,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,12 +27,11 @@ import { startStubProvider } from "./stub-provider.mjs";
 import { spawnPiRpc } from "./rpc-client.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const PACKAGES = ["prefix-stabilizer", "compaction-cache", "focus-mode", "cmem"];
+const PACKAGES = ["prefix-stabilizer", "compaction-cache", "focus-mode"];
 const PACKAGE_NAMES = {
 	"prefix-stabilizer": "pi-prefix-stabilizer",
 	"compaction-cache": "pi-compaction-cache",
 	"focus-mode": "pi-focus-mode",
-	cmem: "pi-cmem",
 };
 
 function resolvePiBin() {
@@ -153,12 +151,6 @@ function envFor(agentDir) {
 		// The matcher this session's evidence hinges on: only free-model is
 		// selected, so metered-model must decline via that named rule.
 		PI_COMPACTION_CACHE_MODELS: '["stub/free-model"]',
-		// pi-cmem's worker check is a loopback HTTP call to a claude-mem worker,
-		// not an inference lane -- but this test contacts nothing beyond its own
-		// stub, so keep it off and point discovery at a directory that does not
-		// exist rather than this machine's real ~/.claude-mem.
-		PI_CMEM_DISABLED: "1",
-		CLAUDE_MEM_DATA_DIR: join(agentDir, "no-claude-mem"),
 	};
 }
 
@@ -240,8 +232,6 @@ test("packed tarballs, installed into a scratch agent directory, load and act in
 				for (const [cmd, pkg] of [
 					["compaction-cache-status", "compaction-cache"],
 					["exstats", "focus-mode"],
-					["memory-status", "cmem"],
-					["memory-set", "cmem"],
 				]) {
 					assert.ok(commandsByName[cmd], `missing command: ${cmd}`);
 					assert.equal(
@@ -346,58 +336,6 @@ test("packed tarballs, installed into a scratch agent directory, load and act in
 			}
 		});
 
-		await t.test("pi-cmem each-prompt injection reaches provider requests once per prompt", async () => {
-			const worker = createServer((request, response) => {
-				if (request.url === "/api/health") {
-					response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ version: "live-test-worker" }));
-					return;
-				}
-				if (request.url?.startsWith("/api/context/inject")) {
-					response.writeHead(200, { "Content-Type": "text/plain" }).end("live prompt digest");
-					return;
-				}
-				response.writeHead(200, { "Content-Type": "application/json" }).end("{}");
-			});
-			let rpc;
-			try {
-				await new Promise((resolve) => worker.listen(0, "127.0.0.1", resolve));
-				const workerAddress = worker.address();
-				assert.ok(workerAddress && typeof workerAddress === "object");
-
-				writeFileSync(
-					join(agentDir, "pi-cmem.json"),
-					JSON.stringify({
-						capture: false,
-						inject: true,
-						injectWhen: "each-prompt",
-						workerHost: "127.0.0.1",
-						workerPort: workerAddress.port,
-					}),
-				);
-				const requestStart = stub.requests.length;
-				rpc = spawnPiRpc(piBin, RPC_ARGS("free-model"), {
-					...envFor(agentDir),
-					PI_CMEM_DISABLED: "0",
-				});
-				await rpc.promptAndWaitIdle("First prompt for injection evidence.", "inject-p1");
-				await rpc.promptAndWaitIdle("Second prompt for injection evidence.", "inject-p2");
-
-				const requests = stub.requests.slice(requestStart);
-				assert.equal(requests.length, 2);
-				const digestCounts = requests.map((request) =>
-					(request.body.messages ?? []).filter((message) => messageText(message.content).includes("live prompt digest")).length,
-				);
-				assert.deepEqual(digestCounts, [1, 2]);
-			} finally {
-				try {
-					if (rpc) await rpc.stop();
-				} finally {
-					if (worker.listening) {
-						await new Promise((resolve, reject) => worker.close((error) => (error ? reject(error) : resolve())));
-					}
-				}
-			}
-		});
 	} finally {
 		await stub.close();
 		rmSync(agentDir, { recursive: true, force: true });

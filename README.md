@@ -1,16 +1,15 @@
 # pi-extensions
 
-Eight extensions for the [pi coding agent](https://pi.dev), published from one
+Seven extensions for the [pi coding agent](https://pi.dev), published from one
 repository.
 
-Three help long-running sessions reuse context. Four help you steer a run, see
+Two help long-running sessions reuse context. Four help you steer a run, see
 what it cost, and keep a draft prompt safe. One puts images on the wire.
 
 | package | what it does |
 |---|---|
 | [`pi-prefix-stabilizer`](extensions/prefix-stabilizer) | Keeps pi's system prompt byte-stable so a server's KV prefix cache survives across turns and resumes. Normalises the install path, sorts tools deterministically, and warns once when the prompt genuinely drifts. |
 | [`pi-compaction-cache`](extensions/compaction-cache) | Makes `/compact` reuse that cache instead of re-prefilling the window from cold, by building the summarization request as a true prefix of the live conversation. |
-| [`pi-cmem`](extensions/cmem) | Bridges pi to a [claude-mem](https://github.com/thedotmack/claude-mem) worker over its HTTP API, so pi sessions share one memory namespace with other agents working in the same repository. |
 | [`pi-focus-mode`](extensions/focus-mode) | Keeps the transcript focused by folding thinking and tool calls into progress lines and block titles, with exchange stats in the status line and summary card. |
 | [`pi-interrupt-steer`](extensions/interrupt-steer) | Interrupts a running turn and sends the editor text as one new user message. |
 | [`pi-quick-cancel`](extensions/quick-cancel) | Cancels a running turn and, while the first response is unfinished, returns the prompt to the editor. |
@@ -22,7 +21,6 @@ what it cost, and keep a draft prompt safe. One puts images on the wire.
 ```sh
 pi install npm:pi-prefix-stabilizer
 pi install npm:pi-compaction-cache
-pi install npm:pi-cmem
 pi install npm:pi-focus-mode
 pi install npm:pi-interrupt-steer
 pi install npm:pi-quick-cancel
@@ -46,11 +44,9 @@ to one machine, and nothing writes to your home directory unless you ask it to.
 Settings resolve in this order, with later sources winning:
 
 1. the package's documented default
-2. a peer service's own published settings, where one applies (`pi-cmem` reads
-   claude-mem's settings file to find the worker it is actually running on)
-3. the package's config file in your pi agent directory
-4. the same file in `<project>/.pi/`, **only when the project is trusted**
-5. the package's environment variable
+2. the package's config file in your pi agent directory
+3. the same file in `<project>/.pi/`, **only when the project is trusted**
+4. the package's environment variable
 
 Each value carries the source it came from, so a package can tell you not just what a
 setting is but where it came from. See each package's README for its own settings table.
@@ -62,7 +58,6 @@ package name:
 |---|---|
 | `pi-prefix-stabilizer` | `pi-prefix-stabilizer.json` |
 | `pi-compaction-cache` | `compaction-cache.json` |
-| `pi-cmem` | `pi-cmem.json` |
 | `pi-focus-mode` | `focus-mode.json` |
 | `pi-interrupt-steer` | `pi-interrupt-steer.json` |
 | `pi-quick-cancel` | `pi-quick-cancel.json` |
@@ -100,4 +95,4 @@ pi installation.
 
 ## Licence
 
-MIT. `pi-cmem` talks to claude-mem, which is Apache-2.0; it imports none of its code.
+MIT.

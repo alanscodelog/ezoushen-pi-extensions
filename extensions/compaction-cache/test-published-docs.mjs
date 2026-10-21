@@ -45,16 +45,6 @@ const packageRequirements = {
 		"| `PI_PREFIX_STABILIZER_LOG` | unset |",
 		"Default installation performs no filesystem writes",
 	],
-	"pi-cmem": [
-		"| `disabled` | `false` |",
-		"| `capture` | `true` |",
-		"| `inject` | `false` |",
-		"| `workerHost` | `\"127.0.0.1\"` |",
-		"| `workerPort` | `37777` |",
-		"| `project` | `\"\"` |",
-		"| `fallbackPath` | `\"\"` |",
-		"an unreachable worker produces one warning",
-	],
 	"pi-focus-mode": [
 		"`processKey`, `exchangeKey`, and `pickerKey`",
 		"`ctrl+alt+e`, and `ctrl+alt+s`",
@@ -202,12 +192,4 @@ test("both prefix packages state their load order", () => {
 		const readme = readFileSync(join(repoRoot, "extensions", name, "README.md"), "utf8");
 		assert.match(readme, /Load `pi-prefix-stabilizer` before `pi-compaction-cache`\./);
 	}
-});
-
-test("cmem documents its license, alternative, and shared namespace", () => {
-	const readme = readFileSync(join(repoRoot, "extensions", "cmem", "README.md"), "utf8");
-	assert.match(readme, /claude-mem is licensed under Apache-2\.0/);
-	assert.match(readme, /@husniadil\/pi-mem/);
-	assert.match(readme, /does not prefix project names with `pi-`/);
-	assert.match(readme, /Pi, Claude Code, and Codex share one\s+repository namespace/);
 });
