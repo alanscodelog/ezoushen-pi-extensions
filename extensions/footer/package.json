@@ -1,0 +1,37 @@
+{
+	"name": "pi-footer",
+	"version": "0.1.0",
+	"description": "Render a compact Pi status footer without blocking the UI.",
+	"type": "module",
+	"main": "./footer.js",
+	"exports": "./footer.js",
+	"files": [
+		"footer.js",
+		"README.md",
+		"LICENSE"
+	],
+	"keywords": [
+		"pi-package"
+	],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ezoushen/pi-extensions.git",
+		"directory": "extensions/footer"
+	},
+	"homepage": "https://github.com/ezoushen/pi-extensions/tree/main/extensions/footer#readme",
+	"bugs": {
+		"url": "https://github.com/ezoushen/pi-extensions/issues"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"pi": {
+		"extensions": [
+			"./footer.js"
+		]
+	}
+}
