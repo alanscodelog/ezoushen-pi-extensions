@@ -71,11 +71,12 @@ export default function footer(pi: ExtensionAPI): void {
 		const branch = gitBranch;
 		if (!branch) return undefined;
 		if (!force && prCache?.branch === branch) return prCache.prNumber;
-		const output = await runGh(cwd).catch((error: unknown) => {
+		const output = await runGh(cwd).catch((error: unknown): string | undefined => {
 			if (isNoPullRequestError(error)) return "";
-			throw error;
+			return undefined;
 		});
 		if (generation !== gitRefreshGeneration || footerDisposed || branch !== gitBranch) return undefined;
+		if (output === undefined) return prCache?.branch === branch ? prCache.prNumber : undefined;
 		const prNumber = parsePrNumber(output);
 		prCache = { branch, prNumber };
 		return prNumber;
