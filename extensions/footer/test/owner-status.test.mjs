@@ -47,14 +47,14 @@ test("published extension statuses render as separate owner blocks", async () =>
 	const mounted = await mount({
 		getExtensionStatuses: () => new Map([
 			["pi-lens", "Searching"],
-			["glla", "Ready"],
+			["owner-b", "Ready"],
 		]),
 	});
 
 	assert.deepEqual(mounted.renderer.render(120), [
 		"my-project │ ██░░░░ 34% · 262k │ -- tps │ Catalog Model",
 		"│ pi-lens · Searching",
-		"│ glla · Ready",
+		"│ owner-b · Ready",
 	]);
 });
 
@@ -77,7 +77,7 @@ test("all footer lines fit the available width", async () => {
 	const mounted = await mount({
 		getExtensionStatuses: () => new Map([
 			["pi-lens", "Searching the index"],
-			["glla", "Ready"],
+			["owner-b", "Ready"],
 		]),
 	});
 	assert.ok(mounted.renderer.render(120)[1].startsWith("│ pi-lens · "));
