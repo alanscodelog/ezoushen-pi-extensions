@@ -73,18 +73,19 @@ test("a multi-line extension status indents continuation lines under its label",
 	]);
 });
 
-test("owner status lines fit the available width", async () => {
+test("all footer lines fit the available width", async () => {
 	const mounted = await mount({
 		getExtensionStatuses: () => new Map([
 			["pi-lens", "Searching the index"],
 			["glla", "Ready"],
 		]),
 	});
-	const ownerLines = mounted.renderer.render(24).slice(1);
-
-	assert.equal(ownerLines.length, 2);
-	assert.ok(ownerLines[0].startsWith("│ pi-lens · "));
-	assert.ok(ownerLines.every((line) => visibleWidth(line) <= 24));
+	assert.ok(mounted.renderer.render(120)[1].startsWith("│ pi-lens · "));
+	for (const width of [0, 1, 24, 60, 120]) {
+		const lines = mounted.renderer.render(width);
+		assert.equal(lines.length, 3);
+		assert.ok(lines.every((line) => visibleWidth(line) <= width), `all lines fit width ${width}`);
+	}
 });
 
 test("owners without published statuses produce no owner blocks", async () => {

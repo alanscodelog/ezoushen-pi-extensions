@@ -1,6 +1,6 @@
 # pi-extensions
 
-Seven extensions for the [pi coding agent](https://pi.dev), published from one
+Eight extensions for the [pi coding agent](https://pi.dev), published from one
 repository.
 
 Two help long-running sessions reuse context. Four help you steer a run, see
