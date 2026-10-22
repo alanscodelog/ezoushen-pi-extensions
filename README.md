@@ -1,11 +1,11 @@
 # pi-extensions
 
-Eight extensions for the [pi coding agent](https://pi.dev), published from one
+Nine extensions for the [pi coding agent](https://pi.dev), published from one
 repository.
 
-Two help long-running sessions reuse context. Four help you steer a run, see
-what it cost, and keep a draft prompt safe. One puts images on the wire. One draws
-the session footer without ever blocking it.
+Two help long-running sessions reuse context. Five help you steer a run, see what
+it cost, keep a draft prompt safe, and stop a secret reaching the model. One puts
+images on the wire. One draws the session footer without ever blocking it.
 
 | package | what it does |
 |---|---|
@@ -16,6 +16,7 @@ the session footer without ever blocking it.
 | [`pi-quick-cancel`](extensions/quick-cancel) | Cancels a running turn and, while the first response is unfinished, returns the prompt to the editor. |
 | [`pi-prompt-drafts`](extensions/prompt-drafts) | Ctrl+S draft queue for the prompt editor: save a draft with a keypress and get it back when your next prompt is sent, or with the same key. |
 | [`pi-image-thumbnails`](extensions/image-thumbnails) | Image thumbnails for the prompt editor: pasted paths, `[Image #1]`, markdown, and `file://` URLs become real image blocks on send plus aspect-fill attachment thumbnails while you type. |
+| [`pi-context-redact`](extensions/context-redact) | Replaces typed secrets with stable placeholders before the model or the session file sees them — structural detectors plus a 220-rule corpus, fail-closed scanning, restoration only inside `write`/`edit`, and a refusal that names the safe route. |
 | [`pi-session-footer`](extensions/footer) | Draws the status footer — directory, git state, context bar, speed, model display name, and other extensions' status lines — from cached state only, so a slow `git` or `gh` never freezes the terminal. |
 
 ## Install
@@ -28,6 +29,7 @@ pi install npm:pi-interrupt-steer
 pi install npm:pi-quick-cancel
 pi install npm:pi-prompt-drafts
 pi install npm:pi-image-thumbnails
+pi install npm:pi-context-redact
 pi install npm:pi-session-footer
 ```
 
@@ -66,6 +68,7 @@ package name:
 | `pi-quick-cancel` | `pi-quick-cancel.json` |
 | `pi-prompt-drafts` | `pi-prompt-drafts.json` |
 | `pi-image-thumbnails` | `pi-image-thumbnails.json` |
+| `pi-context-redact` | `pi-context-redact.json` |
 
 `pi-focus-mode` is the exception to step 4: its fold keys and `cursorMode` come only
 from the file in your pi agent directory and their environment variables. Only
@@ -74,7 +77,7 @@ is trusted.
 
 ## Behaviour when something is missing
 
-None of these six is correctness-critical, so none of them takes a session down. A
+None of these packages is correctness-critical, so none of them takes a session down. A
 malformed settings file degrades to the documented defaults. An unreachable peer
 service is reported, not fatal. Warnings are made **once** per session per distinct
 reason — and when pi is running non-interactively, where there is no UI to notify,

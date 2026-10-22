@@ -75,6 +75,13 @@ const packageRequirements = {
 		"`PI_QUICK_CANCEL_KEY`",
 		"rewind the chat to before the prompt was sent",
 	],
+	"pi-context-redact": [
+		"| `enabled` | `true` |",
+		"| `tier` | `\"balanced\"` |",
+		"| `scanBudgetMs` | `1500` |",
+		"withhold",
+		"no network, no subprocess, no model call",
+	],
 };
 
 function filesUnder(root) {
@@ -163,7 +170,7 @@ test("packed tarballs and git-tracked source contain no private deployment ident
 test("every packed package documents its contract, settings, and unmet behavior", () => {
 	const { temp, packages } = packAll();
 	try {
-		assert.equal(packages.length, 8);
+		assert.equal(packages.length, 9);
 		for (const packed of packages) {
 			const readme = readFileSync(join(packed.root, "README.md"), "utf8");
 			assert.match(readme, /^## External contract$/m, packed.name);

@@ -1,0 +1,43 @@
+{
+	"name": "pi-context-redact",
+	"version": "0.1.0",
+	"description": "Replaces typed secrets with stable placeholders in Pi before the model or the session file sees them \u2014 structural detectors, local-only, fail-closed.",
+	"type": "module",
+	"main": "./context-redact.js",
+	"exports": "./context-redact.js",
+	"files": [
+		"context-redact.js",
+		"README.md",
+		"RULES.md",
+		"LICENSE",
+		"vendor/GITLEAKS-LICENSE",
+		"skills"
+	],
+	"keywords": [
+		"pi-package"
+	],
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ezoushen/pi-extensions.git",
+		"directory": "extensions/context-redact"
+	},
+	"homepage": "https://github.com/ezoushen/pi-extensions/tree/main/extensions/context-redact#readme",
+	"bugs": {
+		"url": "https://github.com/ezoushen/pi-extensions/issues"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"pi": {
+		"extensions": [
+			"./context-redact.js"
+		],
+		"skills": [
+			"./skills"
+		]
+	}
+}
