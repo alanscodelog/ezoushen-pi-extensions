@@ -40,9 +40,10 @@ export default function footer(pi: ExtensionAPI): void {
 	const startGitRefresh = (generation: number, cwd: string, forcePr = false) => {
 		gitRefreshInFlight = true;
 		lastGitRefreshAt = Date.now();
-		void Promise.all([refreshGit(cwd), refreshPr(cwd, forcePr, generation)]).then(([info, prNumber]) => {
+		void Promise.allSettled([refreshGit(cwd), refreshPr(cwd, forcePr, generation)]).then(([info, prNumber]) => {
+			if (info.status === "rejected" || prNumber.status === "rejected") return;
 			if (generation !== gitRefreshGeneration || footerDisposed) return;
-			gitInfo = { ...info, prNumber };
+			gitInfo = { ...info.value, prNumber: prNumber.value };
 			requestRender?.();
 		}).catch(() => {}).finally(() => {
 			gitRefreshInFlight = false;
@@ -51,11 +52,15 @@ export default function footer(pi: ExtensionAPI): void {
 	};
 
 	const scheduleQueuedGitRefresh = (fallbackCwd: string) => {
-		if (!gitRefreshQueued || footerDisposed || gitRefreshTimer) return;
+		if (!gitRefreshQueued || footerDisposed || gitRefreshInFlight || gitRefreshTimer) return;
 		const delay = Math.max(0, lastGitRefreshAt + GIT_REFRESH_INTERVAL_MS - Date.now());
 		const startQueuedRefresh = () => {
 			gitRefreshTimer = undefined;
-			if (!gitRefreshQueued || footerDisposed) return;
+			if (!gitRefreshQueued || footerDisposed || gitRefreshInFlight) return;
+			if (Date.now() < lastGitRefreshAt + GIT_REFRESH_INTERVAL_MS) {
+				scheduleQueuedGitRefresh(fallbackCwd);
+				return;
+			}
 			gitRefreshQueued = false;
 			const forcePr = gitRefreshForceQueued;
 			gitRefreshForceQueued = false;
@@ -86,18 +91,12 @@ export default function footer(pi: ExtensionAPI): void {
 	const requestGitRefresh = (forcePr = false) => {
 		if (footerDisposed || !gitCwd) return;
 		gitRefreshGeneration += 1;
-		if (gitRefreshInFlight) {
-			gitRefreshQueued = true;
-			gitRefreshForceQueued ||= forcePr;
-			return;
-		}
-		if (Date.now() < lastGitRefreshAt + GIT_REFRESH_INTERVAL_MS) {
-			gitRefreshQueued = true;
-			gitRefreshForceQueued ||= forcePr;
-			scheduleQueuedGitRefresh(gitCwd);
-			return;
-		}
-		startGitRefresh(gitRefreshGeneration, gitCwd, forcePr);
+		gitRefreshQueued = true;
+		gitRefreshForceQueued ||= forcePr;
+		if (gitRefreshInFlight) return;
+		if (gitRefreshTimer) clearTimeout(gitRefreshTimer);
+		gitRefreshTimer = undefined;
+		scheduleQueuedGitRefresh(gitCwd);
 	};
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -157,7 +156,7 @@ export default function footer(pi: ExtensionAPI): void {
 							extensionStatusLines.push(truncateToWidth(`${linePrefix}${statusLine}`, _width, "…"));
 						}
 					}
-					return [line, ...extensionStatusLines];
+					return [truncateToWidth(line, _width, "…"), ...extensionStatusLines];
 				},
 			};
 		});
@@ -228,11 +227,13 @@ export default function footer(pi: ExtensionAPI): void {
 }
 
 async function refreshGit(cwd: string): Promise<GitInfo> {
-	const [status, numstat] = await Promise.all([
+	const [status, numstat] = await Promise.allSettled([
 		runGit(cwd, ["status", "--porcelain"]),
 		runGit(cwd, ["diff", "HEAD", "--numstat"]),
 	]);
-	return parseGitInfo(status, numstat);
+	if (status.status === "rejected") throw status.reason;
+	if (numstat.status === "rejected") throw numstat.reason;
+	return parseGitInfo(status.value, numstat.value);
 }
 
 async function runGit(cwd: string, args: string[]): Promise<string> {

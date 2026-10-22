@@ -234,6 +234,139 @@ test("a queued refresh discards the older result", async (t) => {
 	}
 });
 
+for (const eventFirst of [true, false]) {
+	test(`deadline refreshes stay serialized with ${eventFirst ? "event before timer" : "timer before event"}`, async (t) => {
+		t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+		const git = stubDeferredGit();
+		let mounted;
+		try {
+			mounted = await mount();
+			git.resolveRound(new Map([
+				["status --porcelain", " M initial.ts\n"],
+				["diff HEAD --numstat", "1\t0\tinitial.ts\n"],
+			]));
+			await new Promise((resolve) => setImmediate(resolve));
+			t.mock.timers.tick(100);
+			await mounted.handlers.get("tool_result")({}, mounted.ctx);
+			assert.equal(git.calls.length, 2);
+
+			if (eventFirst) {
+				t.mock.timers.setTime(1_000);
+				await mounted.handlers.get("tool_result")({}, mounted.ctx);
+				t.mock.timers.tick(0);
+			} else {
+				t.mock.timers.tick(900);
+				await mounted.handlers.get("tool_result")({}, mounted.ctx);
+			}
+			assert.equal(git.calls.length, 4, "only one refresh starts at the deadline");
+			git.resolveRound(new Map([
+				["status --porcelain", " M deadline.ts\n"],
+				["diff HEAD --numstat", "2\t0\tdeadline.ts\n"],
+			]));
+			await new Promise((resolve) => setImmediate(resolve));
+			if (eventFirst) {
+				assert.match(mounted.renderer.render(120)[0], /\(1\) \+2\/-0/);
+			} else {
+				assert.doesNotMatch(mounted.renderer.render(120)[0], /\(1\) \+2\/-0/);
+			}
+			t.mock.timers.tick(999);
+			assert.equal(git.calls.length, 4, "the next interval has not elapsed");
+			t.mock.timers.tick(1);
+			assert.equal(git.calls.length, eventFirst ? 4 : 6, "only a newer event requires a follow-up");
+			if (!eventFirst) {
+				git.resolveRound(new Map([
+					["status --porcelain", " M current.ts\n"],
+					["diff HEAD --numstat", "9\t0\tcurrent.ts\n"],
+				]));
+				await new Promise((resolve) => setImmediate(resolve));
+				assert.match(mounted.renderer.render(120)[0], /\(1\) \+9\/-0/);
+			}
+			t.mock.timers.tick(1_000);
+			assert.equal(git.calls.length, eventFirst ? 4 : 6, "no unrequested refresh remains");
+		} finally {
+			mounted?.renderer.dispose();
+			git.restore();
+			t.mock.timers.reset();
+		}
+	});
+}
+
+for (const failedIndex of [0, 1]) {
+	for (const siblingFails of [false, true]) {
+		test(`a failed ${failedIndex === 0 ? "status" : "diff"} holds the refresh slot until its sibling ${siblingFails ? "times out" : "succeeds"}`, async (t) => {
+			t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+			const git = stubDeferredGit();
+			let mounted;
+			try {
+				mounted = await mount();
+				assert.equal(git.calls.length, 2);
+				git.calls[failedIndex].callback(new Error("git failed promptly"), "", "");
+				await new Promise((resolve) => setImmediate(resolve));
+				t.mock.timers.tick(1_001);
+				await mounted.handlers.get("tool_result")({}, mounted.ctx);
+				await mounted.handlers.get("message_end")({ message: { role: "assistant" } }, mounted.ctx);
+				assert.equal(git.calls.length, 2, "pending sibling still owns the refresh slot");
+				assert.match(mounted.renderer.render(120)[0], /feature\/worktree/);
+				assert.doesNotMatch(mounted.renderer.render(120)[0], /\(1\) \+/);
+
+				const error = siblingFails ? Object.assign(new Error("git timeout"), { killed: true }) : null;
+				git.calls[1 - failedIndex].callback(error, "", "");
+				await new Promise((resolve) => setImmediate(resolve));
+				assert.equal(git.calls.length, 4, "one follow-up starts after both commands settle");
+				for (const call of git.calls.slice(2)) {
+					call.callback(null, call.args[0] === "status" ? " M recovered.ts\n" : "7\t2\trecovered.ts\n", "");
+				}
+				await new Promise((resolve) => setImmediate(resolve));
+				assert.match(mounted.renderer.render(120)[0], /feature\/worktree \(1\) \+7\/-2/);
+				t.mock.timers.tick(1_000);
+				assert.equal(git.calls.length, 4, "failed rounds do not leave extra follow-ups");
+			} finally {
+				mounted?.renderer.dispose();
+				git.restore();
+				t.mock.timers.reset();
+			}
+		});
+	}
+}
+
+test("a failed git pair holds the refresh slot while the PR lookup is pending", async (t) => {
+	t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+	const original = childProcess.execFile;
+	const calls = [];
+	childProcess.execFile = (file, args, _options, callback) => {
+		calls.push({ file, args, callback });
+		return {};
+	};
+	syncBuiltinESMExports();
+	let mounted;
+	try {
+		mounted = await mount();
+		assert.equal(calls.length, 3);
+		calls[0].callback(new Error("status failed"), "", "");
+		calls[1].callback(null, "", "");
+		await new Promise((resolve) => setImmediate(resolve));
+		t.mock.timers.tick(1_001);
+		await mounted.handlers.get("tool_result")({}, mounted.ctx);
+		assert.equal(calls.length, 3, "the PR process still owns the refresh slot");
+		calls[2].callback(null, "42", "");
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.equal(calls.length, 6, "one follow-up starts after the PR process settles");
+		for (const call of calls.slice(3)) {
+			const output = call.file === "gh" ? "42" : call.args[0] === "status" ? " M recovered.ts\n" : "7\t2\trecovered.ts\n";
+			call.callback(null, output, "");
+		}
+		await new Promise((resolve) => setImmediate(resolve));
+		assert.match(mounted.renderer.render(120)[0], /feature\/worktree \(#42\) \(1\) \+7\/-2/);
+		t.mock.timers.tick(1_000);
+		assert.equal(calls.length, 6);
+	} finally {
+		mounted?.renderer.dispose();
+		childProcess.execFile = original;
+		syncBuiltinESMExports();
+		t.mock.timers.reset();
+	}
+});
+
 test("a failed git lookup leaves the footer renderable", async () => {
 	const calls = [];
 	const unhandledRejections = [];
