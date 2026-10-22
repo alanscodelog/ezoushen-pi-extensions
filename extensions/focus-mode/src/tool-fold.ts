@@ -464,6 +464,18 @@ export class ToolFoldModel {
 	cursorTitle(): string | undefined { return this.cursorActive ? this.cursorRows().find((item) => item.key === this.cursorKey)?.title : undefined; }
 	isCursorHighlighted(key: string): boolean { return this.cursorActive && this.cursorKey === key; }
 	beginExchange(index = this.currentExchange + 1): void { this.currentExchange = index; this.openProcess = undefined; }
+	/**
+	 * Starts a new visual fold segment inside the current exchange after a mid-run
+	 * prompt (a steer or follow-up). The exchange card still counts both prompts,
+	 * but the transcript gets a fresh progress line and a fresh process tree instead
+	 * of continuing the earlier one across the user row. Fractional ids keep the
+	 * segment from colliding with the next exchange's integer index.
+	 */
+	beginSegment(): void {
+		if (this.openProcess) this.openProcess.settled = true;
+		this.openProcess = undefined;
+		this.currentExchange = Math.max(1, this.currentExchange) + 0.5;
+	}
 	/** Closes the open process and folds answered progress after the final text is known. */
 	endExchange(durationMs?: number, answered = true): void {
 		if (answered) {

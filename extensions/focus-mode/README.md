@@ -8,6 +8,10 @@ block and its live time while streaming. In the running exchange, a tool call th
 has streamed but not yet started shows as `⚙ <tool> queued`. A call whose exchange
 settled, or was restored, without a result shows `no result` in its title and no
 live activity. At the next fold level, each block has a one-line title in stream order, with dim `├` and `└` guides under its process line and `│` continuing through rows with later siblings.
+
+A mid-run follow-up (a steer) is a visual boundary: the fold tree before it closes and
+the blocks after it start a fresh segment with their own progress line, while the exchange
+card still counts both prompts.
 While an exchange streams, assistant text stays visible. After it settles, an
 exchange with a process and a trailing answer folds its processes and earlier
 assistant text into one dim progress line at the first progress item. Opening that

@@ -647,9 +647,13 @@ export function registerExchangeStats(pi: ExtensionAPI, toolComponent: typeof To
 
 	pi.on("before_agent_start", (_event, ctx) => {
 		if (running) {
-			// A follow-up arrived mid-run; pi will not settle until it drains, so this
-			// continues the current span instead of restarting it.
+			// A follow-up arrived mid-run; pi will not settle until it drains, so the
+			// exchange card keeps counting both prompts. Visually the fold ends here:
+			// the next blocks start a fresh segment, so the user row is a boundary
+			// rather than a line inside the previous turn's process tree.
 			promptCount++;
+			toolFold.endExchange();
+			toolFold.beginSegment();
 			return;
 		}
 		beginExchange(ctx, 1);
