@@ -16,6 +16,8 @@ type GitInfo = {
 	changedFiles: number;
 	added: number;
 	deleted: number;
+	ahead?: number;
+	behind?: number;
 	prNumber?: number;
 };
 
@@ -249,13 +251,19 @@ export default function footer(pi: ExtensionAPI): void {
 }
 
 async function refreshGit(cwd: string): Promise<GitInfo> {
-	const [status, numstat] = await Promise.allSettled([
+	const [status, numstat, divergence] = await Promise.allSettled([
 		runGit(cwd, ["status", "--porcelain"]),
 		runGit(cwd, ["diff", "HEAD", "--numstat"]),
+		// Fails when the branch has no upstream; that is not an error for the footer.
+		runGit(cwd, ["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]),
 	]);
 	if (status.status === "rejected") throw status.reason;
 	if (numstat.status === "rejected") throw numstat.reason;
-	return parseGitInfo(status.value, numstat.value);
+	return parseGitInfo(
+		status.value,
+		numstat.value,
+		divergence.status === "fulfilled" ? divergence.value : "",
+	);
 }
 
 async function runGit(cwd: string, args: string[]): Promise<string> {
@@ -285,7 +293,7 @@ function parsePrNumber(output: string): number | undefined {
 	return Number.isInteger(prNumber) && prNumber > 0 ? prNumber : undefined;
 }
 
-function parseGitInfo(status: string, numstat: string): GitInfo {
+function parseGitInfo(status: string, numstat: string, divergence: string): GitInfo {
 	const changedFiles = status.split(/\r?\n/).filter((line) => line.length > 0).length;
 	let added = 0;
 	let deleted = 0;
@@ -296,7 +304,17 @@ function parseGitInfo(status: string, numstat: string): GitInfo {
 		if (Number.isFinite(addedLines)) added += addedLines;
 		if (Number.isFinite(deletedLines)) deleted += deletedLines;
 	}
-	return { changedFiles, added, deleted };
+	// `rev-list --left-right --count @{upstream}...HEAD` prints "<behind>\t<ahead>".
+	const [behindText, aheadText] = divergence.trim().split(/\s+/);
+	const behind = Number(behindText);
+	const ahead = Number(aheadText);
+	return {
+		changedFiles,
+		added,
+		deleted,
+		ahead: Number.isFinite(ahead) ? ahead : undefined,
+		behind: Number.isFinite(behind) ? behind : undefined,
+	};
 }
 
 function formatGitSection(
@@ -306,10 +324,13 @@ function formatGitSection(
 ): string | undefined {
 	if (!branch) return undefined;
 	const branchText = info?.prNumber ? `${branch} (#${info.prNumber})` : branch;
-	const text = info && info.changedFiles > 0
-		? `${branchText} (${info.changedFiles}) +${info.added}/-${info.deleted}`
-		: branchText;
-	return theme.fg("mdLink", text);
+	const parts = [branchText];
+	if (info && (info.added > 0 || info.deleted > 0)) {
+		parts.push(`(+${info.added},-${info.deleted})`);
+	}
+	if (info?.ahead) parts.push(`${info.ahead}↑`);
+	if (info?.behind) parts.push(`${info.behind}↓`);
+	return theme.fg("mdLink", parts.join(" "));
 }
 
 function formatModelName(ctx: ExtensionContext, pi: ExtensionAPI): string {

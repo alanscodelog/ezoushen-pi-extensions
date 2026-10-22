@@ -24,14 +24,14 @@ node --test test/owner-status.test.mjs
 One status line, then one line per extension that publishes a status:
 
 ```
-dir │ branch (#pr) (changed) +added/-deleted │ ██░░░░ 34% · 262k │ 27.4 tps │ (provider) Model [high]
+dir │ branch (#pr) (+added,-deleted) 5↑ 2↓ │ ██░░░░ 34% · 262k │ 27.4 tps │ (provider) Model [high]
 │ pi-lens · Searching the index
 │ perms · yolo
 ```
 
 - **Rendering never blocks the terminal.** `render()` returns strings built from cached state only. It launches no child process, so a slow `git` or `gh` cannot stall a redraw.
 - **Every returned line fits the requested width.** The main line and each owner line are truncated to the width `render(width)` receives; content that does not fit is cut with `…` rather than allowed to overflow, because Pi's main-screen renderer rejects an over-width line.
-- **Git and PR data arrive asynchronously.** `git status --porcelain` and `git diff HEAD --numstat` run through `execFile` with a 2500 ms timeout; `gh pr view` uses the same bound. Failures are swallowed and the footer keeps rendering its last known state.
+- **Git and PR data arrive asynchronously.** `git status --porcelain`, `git diff HEAD --numstat` and `git rev-list --left-right --count @{upstream}...HEAD` run through `execFile` with a 2500 ms timeout; `gh pr view` uses the same bound. The third query supplies the ahead/behind commit counts shown as `5↑ 2↓`. Failures are swallowed and the footer keeps rendering its last known state.
 - **Refreshes are serialized.** At most one refresh runs at a time, bursts coalesce into a single queued follow-up with a 1000 ms floor, and every request advances a generation counter so a stale result can never overwrite a newer one.
 - **The PR number is cached per branch.** A "no PR" answer is remembered for that branch, so a normal refresh does not call `gh` again; only a branch change or a forced refresh re-asks.
 - **Speed is the session average, not the current turn's rate.** Tokens from each completed assistant turn are accumulated with that turn's wall-clock time, so a fast final turn does not report a rate the session never sustained.
@@ -45,6 +45,7 @@ This package has no settings file and no configuration keys. It reads only what 
 ## Limitations
 
 - The footer shows whatever `footerData.getGitBranch()` reports; outside a git repository it shows the directory, context and model segments only.
+- Ahead/behind arrows appear only for a branch with an upstream; a local-only or detached branch shows none. `(+added,-deleted)` counts uncommitted line changes and is omitted when the tree is clean.
 - Speed is the average over the whole session: output tokens from every completed assistant turn divided by their combined elapsed time, plus the live output so far while a turn is running. It stays blank (`-- tps`) until there is enough output over enough elapsed time to compute a rate.
 - A failed or unresponsive `git`/`gh` lookup keeps the last known values: previously fetched counts and PR numbers stay visible, and a segment is omitted only when no value was ever obtained. The footer itself keeps rendering throughout.
 - There is no periodic refresh when nothing happens: git state updates when a turn or tool result ends, or on a branch change.
