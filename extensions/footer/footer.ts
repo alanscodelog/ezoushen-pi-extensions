@@ -23,7 +23,6 @@ const STATUS_LABELS: Record<string, string> = {
 	"pi-lens-lsp": "pi-lens",
 	mcp: "mcp",
 	"mcp-auth": "mcp",
-	"pi-glla": "glla",
 	"background-tasks": "bg",
 	"subagent-slash": "subagents",
 	"subagent-slash-text": "subagents",
