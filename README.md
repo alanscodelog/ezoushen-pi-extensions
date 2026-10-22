@@ -16,7 +16,7 @@ the session footer without ever blocking it.
 | [`pi-quick-cancel`](extensions/quick-cancel) | Cancels a running turn and, while the first response is unfinished, returns the prompt to the editor. |
 | [`pi-prompt-drafts`](extensions/prompt-drafts) | Ctrl+S draft queue for the prompt editor: save a draft with a keypress and get it back when your next prompt is sent, or with the same key. |
 | [`pi-image-thumbnails`](extensions/image-thumbnails) | Image thumbnails for the prompt editor: pasted paths, `[Image #1]`, markdown, and `file://` URLs become real image blocks on send plus aspect-fill attachment thumbnails while you type. |
-| [`pi-footer`](extensions/footer) | Draws the status footer — directory, git state, context bar, speed, model display name, and other extensions' status lines — from cached state only, so a slow `git` or `gh` never freezes the terminal. |
+| [`pi-session-footer`](extensions/footer) | Draws the status footer — directory, git state, context bar, speed, model display name, and other extensions' status lines — from cached state only, so a slow `git` or `gh` never freezes the terminal. |
 
 ## Install
 
@@ -28,7 +28,7 @@ pi install npm:pi-interrupt-steer
 pi install npm:pi-quick-cancel
 pi install npm:pi-prompt-drafts
 pi install npm:pi-image-thumbnails
-pi install npm:pi-footer
+pi install npm:pi-session-footer
 ```
 
 Each package is independent. Install only what you want.

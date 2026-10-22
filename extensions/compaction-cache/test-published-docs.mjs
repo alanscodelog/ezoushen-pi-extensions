@@ -28,7 +28,7 @@ const forbiddenIdentifiers = [
 ];
 
 const packageRequirements = {
-	"pi-footer": [
+	"pi-session-footer": [
 		"`render()` returns strings built from cached state only",
 		"Every returned line fits the requested width",
 		"This package has no settings file and no configuration keys",
