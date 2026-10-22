@@ -33,6 +33,9 @@ export default function footer(pi: ExtensionAPI): void {
 	let responseStartedAt: number | undefined;
 	let liveOutputTokens = 0;
 	let responseSpeed: ResponseSpeed | undefined;
+	// Session-wide throughput: completed turns' output tokens and wall-clock time.
+	let sessionOutputTokens = 0;
+	let sessionElapsedMs = 0;
 	let requestRender: (() => void) | undefined;
 	let gitInfo: GitInfo | undefined;
 	let gitRefreshGeneration = 0;
@@ -111,6 +114,9 @@ export default function footer(pi: ExtensionAPI): void {
 
 	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
+		sessionOutputTokens = 0;
+		sessionElapsedMs = 0;
+		responseSpeed = undefined;
 		gitCwd = ctx.cwd;
 		gitInfo = undefined;
 		gitBranch = undefined;
@@ -178,9 +184,12 @@ export default function footer(pi: ExtensionAPI): void {
 		if (event.message.role !== "assistant") return;
 		responseStartedAt = Date.now();
 		liveOutputTokens = 0;
-		responseSpeed = { inProgress: true };
+		responseSpeed = { tokensPerSecond: sessionRate(0, 0), inProgress: true };
 		requestRender?.();
 	});
+
+	const sessionRate = (liveTokens: number, liveElapsedMs: number): number | undefined =>
+		calculateTokensPerSecond(sessionOutputTokens + liveTokens, sessionElapsedMs + liveElapsedMs);
 
 	pi.on("message_update", async (event) => {
 		if (event.message.role !== "assistant" || responseStartedAt === undefined) return;
@@ -190,7 +199,7 @@ export default function footer(pi: ExtensionAPI): void {
 			liveOutputTokens += Math.max(1, update.delta.length / 4);
 		}
 		responseSpeed = {
-			tokensPerSecond: calculateTokensPerSecond(liveOutputTokens, Date.now() - responseStartedAt),
+			tokensPerSecond: sessionRate(liveOutputTokens, Date.now() - responseStartedAt),
 			inProgress: true,
 		};
 		requestRender?.();
@@ -205,10 +214,9 @@ export default function footer(pi: ExtensionAPI): void {
 
 		if (responseStartedAt !== undefined) {
 			const outputTokens = event.message.usage?.output || Math.round(liveOutputTokens);
-			responseSpeed = {
-				tokensPerSecond: calculateTokensPerSecond(outputTokens, Date.now() - responseStartedAt),
-				inProgress: false,
-			};
+			sessionOutputTokens += outputTokens;
+			sessionElapsedMs += Date.now() - responseStartedAt;
+			responseSpeed = { tokensPerSecond: sessionRate(0, 0), inProgress: false };
 		}
 		responseStartedAt = undefined;
 		liveOutputTokens = 0;
@@ -234,6 +242,8 @@ export default function footer(pi: ExtensionAPI): void {
 		responseStartedAt = undefined;
 		liveOutputTokens = 0;
 		responseSpeed = undefined;
+		sessionOutputTokens = 0;
+		sessionElapsedMs = 0;
 		requestRender = undefined;
 	});
 }

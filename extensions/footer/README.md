@@ -34,6 +34,7 @@ dir │ branch (#pr) (changed) +added/-deleted │ ██░░░░ 34% · 262
 - **Git and PR data arrive asynchronously.** `git status --porcelain` and `git diff HEAD --numstat` run through `execFile` with a 2500 ms timeout; `gh pr view` uses the same bound. Failures are swallowed and the footer keeps rendering its last known state.
 - **Refreshes are serialized.** At most one refresh runs at a time, bursts coalesce into a single queued follow-up with a 1000 ms floor, and every request advances a generation counter so a stale result can never overwrite a newer one.
 - **The PR number is cached per branch.** A "no PR" answer is remembered for that branch, so a normal refresh does not call `gh` again; only a branch change or a forced refresh re-asks.
+- **Speed is the session average, not the current turn's rate.** Tokens from each completed assistant turn are accumulated with that turn's wall-clock time, so a fast final turn does not report a rate the session never sustained.
 - **Owner lines come from other extensions.** Each entry in `footerData.getExtensionStatuses()` renders as `│ label · text`, with the pipe and label dimmed, known keys shown under friendly names (`pi-lens-lsp` → `pi-lens`, `pi-permission-system` → `perms`), and continuation lines indented under the label. An extension that publishes nothing contributes no line.
 - **The model segment is `(provider) display name [thinking]`.** Thinking shows the active level, `T` when the model supports reasoning but thinking is off, and `–` otherwise; the provider is omitted when Pi does not report one.
 
@@ -44,7 +45,7 @@ This package has no settings file and no configuration keys. It reads only what 
 ## Limitations
 
 - The footer shows whatever `footerData.getGitBranch()` reports; outside a git repository it shows the directory, context and model segments only.
-- Speed is blank (`-- tps`) until the first turn has streamed enough output over enough elapsed time to compute a rate.
+- Speed is the average over the whole session: output tokens from every completed assistant turn divided by their combined elapsed time, plus the live output so far while a turn is running. It stays blank (`-- tps`) until there is enough output over enough elapsed time to compute a rate.
 - A failed or unresponsive `git`/`gh` lookup keeps the last known values: previously fetched counts and PR numbers stay visible, and a segment is omitted only when no value was ever obtained. The footer itself keeps rendering throughout.
 - There is no periodic refresh when nothing happens: git state updates when a turn or tool result ends, or on a branch change.
 

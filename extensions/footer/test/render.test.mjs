@@ -133,3 +133,67 @@ test("a reasoning model with thinking off shows T, and a plain model shows a das
 		assert.ok(renderer.render(200).join("\n").includes(expected), expected);
 	}
 });
+
+test("speed is the whole-session average, not the last turn rate", async () => {
+	const originalNow = Date.now;
+	let now = 1_000;
+	Date.now = () => now;
+	try {
+		const mounted = await mount();
+		const start = mounted.handlers.get("message_start");
+		const update = mounted.handlers.get("message_update");
+		const end = mounted.handlers.get("message_end");
+
+		// turn 1: 100 output tokens over 2s -> 50 tps on its own
+		await start({ message: { role: "assistant" } }, mounted.ctx);
+		now = 2_000;
+		await update({
+			message: { role: "assistant" },
+			assistantMessageEvent: { type: "text_delta", delta: "abcd" },
+		}, mounted.ctx);
+		now = 3_000;
+		await end({ message: { role: "assistant", usage: { output: 100 } } }, mounted.ctx);
+		assert.match(mounted.renderer.render(120).join("\n"), /50\.0 tps/);
+
+		// turn 2: 300 output tokens over 1s -> 300 tps on its own, but the
+		// session is now 400 tokens over 3s -> ~133 tps (integers at or above 100)
+		now = 10_000;
+		await start({ message: { role: "assistant" } }, mounted.ctx);
+		now = 11_000;
+		await end({ message: { role: "assistant", usage: { output: 300 } } }, mounted.ctx);
+		assert.match(mounted.renderer.render(120).join("\n"), /133 tps/);
+	} finally {
+		Date.now = originalNow;
+	}
+});
+
+test("during a turn the session average includes the live output so far", async () => {
+	const originalNow = Date.now;
+	let now = 1_000;
+	Date.now = () => now;
+	try {
+		const mounted = await mount();
+		const start = mounted.handlers.get("message_start");
+		const update = mounted.handlers.get("message_update");
+		const end = mounted.handlers.get("message_end");
+
+		await start({ message: { role: "assistant" } }, mounted.ctx);
+		now = 3_000;
+		await end({ message: { role: "assistant", usage: { output: 200 } } }, mounted.ctx);
+
+		// 200 tokens / 2s = 100 tps; start a second turn and stream more
+		now = 10_000;
+		await start({ message: { role: "assistant" } }, mounted.ctx);
+		now = 11_000;
+		await update({
+			message: { role: "assistant" },
+			assistantMessageEvent: { type: "text_delta", delta: "abcdefgh" },
+		}, mounted.ctx);
+		// session: 200 + ~2 live tokens over 2s + 1s -> ~67.3 tps, still marked in progress
+		const line = mounted.renderer.render(120).join("\n");
+		assert.match(line, /tps…/);
+		assert.doesNotMatch(line, /100\.0 tps/);
+	} finally {
+		Date.now = originalNow;
+	}
+});
