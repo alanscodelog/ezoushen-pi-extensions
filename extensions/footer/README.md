@@ -24,7 +24,7 @@ node --test test/owner-status.test.mjs
 One status line, then one line per extension that publishes a status:
 
 ```
-dir │ branch (#pr) (changed) +added/-deleted │ ███░░░ 34% · 262k │ 27.4 tps │ (provider) Model [thinking]
+dir │ branch (#pr) (changed) +added/-deleted │ ██░░░░ 34% · 262k │ 27.4 tps │ Model
 │ pi-lens · Searching the index
 │ owner · Ready
 ```
@@ -43,8 +43,8 @@ This package has no settings file and no configuration keys. It reads only what 
 ## Limitations
 
 - The footer shows whatever `footerData.getGitBranch()` reports; outside a git repository it shows the directory, context and model segments only.
-- Speed is blank (`-- tps`) until the first assistant turn completes.
-- A `git` or `gh` binary that is missing or unresponsive leaves the corresponding segment empty; the footer itself keeps rendering.
+- Speed is blank (`-- tps`) until the first turn has streamed enough output over enough elapsed time to compute a rate.
+- A failed or unresponsive `git`/`gh` lookup keeps the last known values: previously fetched counts and PR numbers stay visible, and a segment is omitted only when no value was ever obtained. The footer itself keeps rendering throughout.
 - There is no periodic refresh when nothing happens: git state updates when a turn or tool result ends, or on a branch change.
 
 ## If the contract is unmet
@@ -53,4 +53,4 @@ This package has no settings file and no configuration keys. It reads only what 
 - **Stale git data replacing newer data:** run `node --test test/git-status.test.mjs`; the coalescing and generation suites fail if two refreshes overlap or an invalidated result is published.
 - **The same PR answer appearing after switching branches:** run `node --test test/pr-lookup.test.mjs`; the branch-cache suite fails if the per-branch cache is not cleared.
 - **Owner lines missing or not indented:** run `node --test test/owner-status.test.mjs`.
-- If the suites pass but the footer still misbehaves in a real session, the defect is in how Pi calls `setFooter` rather than in this package: capture the pane's footer rows and the extension list Pi reports.
+- If the suites pass but the footer still misbehaves in a real session, the passing tests only narrow which paths were exercised: they do not show that this package is correct under every input or lifecycle (the suites drive mocked Pi contexts). Report the terminal width, the footer rows from the pane, the extension list Pi reports, and the event sequence that preceded the misbehaviour, so the cause can be located in this package or in its consumer.
