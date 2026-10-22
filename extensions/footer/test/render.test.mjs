@@ -89,9 +89,47 @@ test("the footer renders the directory, context, current speed, and model name",
 			assistantMessageEvent: { type: "text_delta", delta: "four" },
 		}, mounted.ctx);
 		assert.deepEqual(mounted.renderer.render(120), [
-			"my-project │ ██░░░░ 34% · 262k │ 1.0 tps… │ Catalog Model",
+			"my-project │ ██░░░░ 34% · 262k │ 1.0 tps… │ Catalog Model [–]",
 		]);
 	} finally {
 		Date.now = originalNow;
+	}
+});
+
+test("the footer shows the provider, display name and thinking level", async () => {
+	const handlers = new Map();
+	let footerFactory;
+	footer({ on: (name, handler) => handlers.set(name, handler), getThinkingLevel: () => "high" });
+	const ctx = {
+		hasUI: true,
+		cwd: "/repo/my-project",
+		model: { id: "catalog-model-id", name: "Catalog Model", provider: "splash", contextWindow: 262_000, reasoning: true },
+		getContextUsage: () => ({ tokens: 90_000 }),
+		ui: { setFooter: (value) => { footerFactory = value; } },
+	};
+	await handlers.get("session_start")({}, ctx);
+	const theme = { fg: (_color, value) => value };
+	const renderer = footerFactory({ requestRender() {} }, theme, {});
+	assert.match(renderer.render(200).join("\n"), /\(splash\) Catalog Model \[high\]/);
+});
+
+test("a reasoning model with thinking off shows T, and a plain model shows a dash", async () => {
+	for (const [model, expected] of [
+		[{ id: "m", name: "Reasoner", provider: "p", contextWindow: 262_000, reasoning: true }, "Reasoner [T]"],
+		[{ id: "m", name: "Plain", provider: "p", contextWindow: 262_000 }, "Plain [–]"],
+	]) {
+		const handlers = new Map();
+		let footerFactory;
+		footer({ on: (name, handler) => handlers.set(name, handler), getThinkingLevel: () => "off" });
+		const ctx = {
+			hasUI: true,
+			cwd: "/repo/my-project",
+			model,
+			getContextUsage: () => ({ tokens: 1_000 }),
+			ui: { setFooter: (value) => { footerFactory = value; } },
+		};
+		await handlers.get("session_start")({}, ctx);
+		const renderer = footerFactory({ requestRender() {} }, { fg: (_c, v) => v }, {});
+		assert.ok(renderer.render(200).join("\n").includes(expected), expected);
 	}
 });

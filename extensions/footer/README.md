@@ -24,9 +24,9 @@ node --test test/owner-status.test.mjs
 One status line, then one line per extension that publishes a status:
 
 ```
-dir │ branch (#pr) (changed) +added/-deleted │ ██░░░░ 34% · 262k │ 27.4 tps │ Model
+dir │ branch (#pr) (changed) +added/-deleted │ ██░░░░ 34% · 262k │ 27.4 tps │ (provider) Model [high]
 │ pi-lens · Searching the index
-│ owner · Ready
+│ perms · yolo
 ```
 
 - **Rendering never blocks the terminal.** `render()` returns strings built from cached state only. It launches no child process, so a slow `git` or `gh` cannot stall a redraw.
@@ -34,7 +34,8 @@ dir │ branch (#pr) (changed) +added/-deleted │ ██░░░░ 34% · 262
 - **Git and PR data arrive asynchronously.** `git status --porcelain` and `git diff HEAD --numstat` run through `execFile` with a 2500 ms timeout; `gh pr view` uses the same bound. Failures are swallowed and the footer keeps rendering its last known state.
 - **Refreshes are serialized.** At most one refresh runs at a time, bursts coalesce into a single queued follow-up with a 1000 ms floor, and every request advances a generation counter so a stale result can never overwrite a newer one.
 - **The PR number is cached per branch.** A "no PR" answer is remembered for that branch, so a normal refresh does not call `gh` again; only a branch change or a forced refresh re-asks.
-- **Owner lines come from other extensions.** Each entry in `footerData.getExtensionStatuses()` renders as `│ label · text`, with continuation lines indented under the label. An extension that publishes nothing contributes no line.
+- **Owner lines come from other extensions.** Each entry in `footerData.getExtensionStatuses()` renders as `│ label · text`, with the pipe and label dimmed, known keys shown under friendly names (`pi-lens-lsp` → `pi-lens`, `pi-permission-system` → `perms`), and continuation lines indented under the label. An extension that publishes nothing contributes no line.
+- **The model segment is `(provider) display name [thinking]`.** Thinking shows the active level, `T` when the model supports reasoning but thinking is off, and `–` otherwise; the provider is omitted when Pi does not report one.
 
 ## Settings
 

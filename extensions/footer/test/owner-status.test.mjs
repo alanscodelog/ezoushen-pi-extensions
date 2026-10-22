@@ -52,7 +52,7 @@ test("published extension statuses render as separate owner blocks", async () =>
 	});
 
 	assert.deepEqual(mounted.renderer.render(120), [
-		"my-project │ ██░░░░ 34% · 262k │ -- tps │ Catalog Model",
+		"my-project │ ██░░░░ 34% · 262k │ -- tps │ Catalog Model [–]",
 		"│ pi-lens · Searching",
 		"│ owner-b · Ready",
 	]);
@@ -66,10 +66,10 @@ test("a multi-line extension status indents continuation lines under its label",
 	});
 
 	assert.deepEqual(mounted.renderer.render(120), [
-		"my-project │ ██░░░░ 34% · 262k │ -- tps │ Catalog Model",
+		"my-project │ ██░░░░ 34% · 262k │ -- tps │ Catalog Model [–]",
 		"│ pi-lens · Searching",
-		`${" ".repeat("│ pi-lens · ".length)}waiting for results`,
-		`${" ".repeat("│ pi-lens · ".length)}ready`,
+		`${"│ "}${" ".repeat("pi-lens · ".length)}waiting for results`,
+		`${"│ "}${" ".repeat("pi-lens · ".length)}ready`,
 	]);
 });
 
@@ -92,7 +92,7 @@ test("owners without published statuses produce no owner blocks", async () => {
 	const mounted = await mount({ getExtensionStatuses: () => new Map() });
 
 	assert.deepEqual(mounted.renderer.render(120), [
-		"my-project │ ██░░░░ 34% · 262k │ -- tps │ Catalog Model",
+		"my-project │ ██░░░░ 34% · 262k │ -- tps │ Catalog Model [–]",
 	]);
 });
 
@@ -114,4 +114,30 @@ test("render reads cached owner statuses without launching a process", async () 
 	} finally {
 		processes.restore();
 	}
+});
+
+test("owner labels are dim and the pipe is borderMuted, and known keys use friendly labels", async () => {
+	const colours = [];
+	const handlers = new Map();
+	let footerFactory;
+	footer({ on: (name, handler) => handlers.set(name, handler) });
+	const ctx = {
+		hasUI: true,
+		cwd: "/repo/my-project",
+		model: { id: "m", name: "Model", contextWindow: 262_000 },
+		getContextUsage: () => ({ tokens: 1_000 }),
+		ui: { setFooter: (value) => { footerFactory = value; } },
+	};
+	await handlers.get("session_start")({}, ctx);
+	const theme = { fg: (colour, value) => { colours.push([colour, value]); return value; } };
+	const renderer = footerFactory(
+		{ requestRender() {} },
+		theme,
+		{ getExtensionStatuses: () => new Map([["pi-lens-lsp", "Active: typescript"], ["pi-permission-system", "yolo"]]) },
+	);
+	const text = renderer.render(120).join("\n");
+	assert.match(text, /│ pi-lens · Active: typescript/);
+	assert.match(text, /│ perms · yolo/);
+	assert.ok(colours.some(([c, v]) => c === "borderMuted" && v.trim() === "│"), "pipe uses borderMuted");
+	assert.ok(colours.some(([c, v]) => c === "dim" && v.startsWith("pi-lens · ")), "label uses dim");
 });

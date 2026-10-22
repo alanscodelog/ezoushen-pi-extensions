@@ -19,6 +19,17 @@ type GitInfo = {
 	prNumber?: number;
 };
 
+const STATUS_LABELS: Record<string, string> = {
+	"pi-lens-lsp": "pi-lens",
+	mcp: "mcp",
+	"mcp-auth": "mcp",
+	"pi-glla": "glla",
+	"background-tasks": "bg",
+	"subagent-slash": "subagents",
+	"subagent-slash-text": "subagents",
+	"pi-permission-system": "perms",
+};
+
 export default function footer(pi: ExtensionAPI): void {
 	let responseStartedAt: number | undefined;
 	let liveOutputTokens = 0;
@@ -145,15 +156,17 @@ export default function footer(pi: ExtensionAPI): void {
 						formatGitSection(theme, footerData?.getGitBranch?.(), gitInfo),
 						formatContextSection(theme, ctx),
 						formatSpeedSection(theme, responseSpeed),
-						theme.fg("mdLink", formatModelName(ctx)),
+						theme.fg("mdLink", formatModelName(ctx, pi)),
 					].filter((segment): segment is string => segment !== undefined).join(separator);
 					const extensionStatusLines: string[] = [];
-					for (const [label, status] of footerData?.getExtensionStatuses?.() ?? []) {
-						const prefix = `│ ${label} · `;
-						const continuationPrefix = " ".repeat(visibleWidth(prefix));
+					for (const [key, status] of footerData?.getExtensionStatuses?.() ?? []) {
+						const owner = `${STATUS_LABELS[key] ?? key} · `;
+						const firstPrefix = `${theme.fg("borderMuted", "│ ")}${theme.fg("dim", owner)}`;
+						const nextPrefix = `${theme.fg("borderMuted", "│ ")}${" ".repeat(owner.length)}`;
 						for (const [index, statusLine] of status.split(/\r?\n/).entries()) {
-							const linePrefix = index === 0 ? prefix : continuationPrefix;
-							extensionStatusLines.push(truncateToWidth(`${linePrefix}${statusLine}`, _width, "…"));
+							if (!statusLine.trim()) continue;
+							const linePrefix = index === 0 ? firstPrefix : nextPrefix;
+							extensionStatusLines.push(truncateToWidth(`${linePrefix}${statusLine.trimEnd()}`, _width, "…"));
 						}
 					}
 					return [truncateToWidth(line, _width, "…"), ...extensionStatusLines];
@@ -290,8 +303,14 @@ function formatGitSection(
 	return theme.fg("mdLink", text);
 }
 
-function formatModelName(ctx: ExtensionContext): string {
-	return ctx.model?.name || (ctx.model?.id ? ctx.model.id.replace(/^models\//, "") : "no-model");
+function formatModelName(ctx: ExtensionContext, pi: ExtensionAPI): string {
+	const provider = ctx.model?.provider;
+	const model = ctx.model?.name || (ctx.model?.id ? ctx.model.id.replace(/^models\//, "") : "no-model");
+	const supportsReasoning = ctx.model?.reasoning ?? false;
+	const thinking = pi.getThinkingLevel?.() ?? "off";
+	const thinkingDisplay = thinking !== "off" ? thinking : supportsReasoning ? "T" : "–";
+	const modelPart = provider ? `(${provider}) ${model}` : model;
+	return `${modelPart} [${thinkingDisplay}]`;
 }
 
 function formatContextSection(theme: ExtensionContext["ui"]["theme"], ctx: ExtensionContext): string {
