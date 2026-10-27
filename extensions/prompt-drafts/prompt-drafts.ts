@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import { Container, SelectList, Text } from "@earendil-works/pi-tui";
+import { spawn } from "node:child_process";
 import { announce } from "../../shared/announce.ts";
 import { resolveSettings, type SettingsRuntime } from "../../shared/settings.ts";
 
@@ -18,10 +19,27 @@ function isShortcutKey(value: unknown): value is ShortcutKey {
 		base !== undefined && (/^[a-z0-9]$/.test(base) || ["enter", "escape", "tab", "space", "backspace", "delete", "up", "down", "left", "right", "home", "end"].includes(base));
 }
 
-/** First line of a draft, truncated for display in the picker. */
+/** First line of a draft, truncated for display in the picker and list. */
 function firstLine(text: string, max = 80): string {
 	const line = text.split("\n")[0]?.trim() ?? "";
 	return line.length > max ? line.slice(0, max - 1) + "…" : line;
+}
+
+/** Pipe text into wl-copy. */
+function copyToClipboard(text: string): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const child = spawn("wl-copy", [], { stdio: ["pipe", "ignore", "pipe"] });
+		let stderr = "";
+		child.stderr.on("data", (chunk) => (stderr += chunk.toString()));
+		child.on("error", (err) =>
+			reject(new Error(`Could not start wl-copy: ${err.message}. Is wl-clipboard installed and WAYLAND_DISPLAY set?`)),
+		);
+		child.on("close", (code) =>
+			code === 0 ? resolve() : reject(new Error(`wl-copy exited ${code}: ${stderr.trim()}`)),
+		);
+		child.stdin.write(text);
+		child.stdin.end();
+	});
 }
 
 /**
@@ -37,9 +55,10 @@ function firstLine(text: string, max = 80): string {
  * already submitted.
  *
  * The /draft command pushes to the same queue without touching the editor,
- * so wrappers and other extensions can enqueue text directly. /drafts (no
- * args) opens a picker showing the first line of each draft; /drafts clear
- * discards the whole queue.
+ * so wrappers and other extensions can enqueue text directly. /drafts opens
+ * an interactive picker in the TUI and prints a numbered list in non-TUI
+ * modes (RPC, print, JSON) where custom() cannot render. /draft-copy <n>
+ * pipes the nth draft to wl-copy. /drafts clear discards the whole queue.
  *
  * Drafts are persisted as a custom session entry (`pi.appendEntry`) on every
  * mutation, and restored on session_start from the current branch. This makes
@@ -102,6 +121,16 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 	const pickDraft = async (ctx: ExtensionContext): Promise<boolean> => {
 		if (drafts.length === 0) {
 			announce(ctx, "pi-prompt-drafts: no drafts.", "info", "pi-prompt-drafts:empty");
+			return false;
+		}
+
+		// custom() requires a real terminal; RPC/print/JSON cannot render it.
+		// In those modes, print the list instead of opening the picker.
+		if (ctx.mode !== "tui") {
+			const list = drafts
+				.map((text, i) => `${i + 1}. ${firstLine(text)}`)
+				.join("\n");
+			announce(ctx, `pi-prompt-drafts: ${drafts.length} draft(s):\n${list}`, "info", "pi-prompt-drafts:list");
 			return false;
 		}
 
@@ -243,6 +272,29 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 			const count = drafts.length;
 			const suffix = count === 1 ? "1 draft queued." : `${count} drafts queued.`;
 			announce(ctx, `pi-prompt-drafts: draft added. ${suffix}`, "info", "pi-prompt-drafts:draft-added");
+		},
+	});
+
+	pi.registerCommand("draft-copy", {
+		description: "Copy the nth draft to the clipboard (`/draft-copy <n>`)",
+		handler: async (args, ctx) => {
+			const raw = (args ?? "").trim();
+			const n = Number(raw);
+			if (!raw || !Number.isInteger(n) || n < 1) {
+				announce(ctx, "pi-prompt-drafts: usage: /draft-copy <n>", "info", "pi-prompt-drafts:draft-copy-usage");
+				return;
+			}
+			const draft = drafts[n - 1];
+			if (draft === undefined) {
+				announce(ctx, `pi-prompt-drafts: no draft at position ${n} (${drafts.length} queued).`, "warning", "pi-prompt-drafts:draft-copy-missing");
+				return;
+			}
+			try {
+				await copyToClipboard(draft);
+				announce(ctx, `pi-prompt-drafts: copied draft ${n} to clipboard (${draft.length} chars).`, "info", "pi-prompt-drafts:draft-copied");
+			} catch (err) {
+				announce(ctx, `pi-prompt-drafts: ${(err as Error).message}`, "error", "pi-prompt-drafts:draft-copy-failed");
+			}
 		},
 	});
 
