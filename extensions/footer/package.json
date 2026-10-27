@@ -1,6 +1,6 @@
 {
 	"name": "pi-session-footer",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Render a compact Pi status footer without blocking the UI.",
 	"type": "module",
 	"main": "./footer.js",
