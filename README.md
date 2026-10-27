@@ -35,6 +35,34 @@ pi install npm:pi-session-footer
 
 Each package is independent. Install only what you want.
 
+### Install the whole repository from git
+
+```sh
+pi install git:github.com/ezoushen/pi-extensions
+```
+
+The repository root is also a package. It declares all nine extensions in
+load order, so one install gives the full set and the cache ordering rule below
+is encoded there rather than left to your `packages` array. A git checkout has
+no built `.js` files, so that manifest points at the TypeScript sources, which
+pi loads directly — no build step.
+
+To take only some of them, filter the package in `settings.json`: a plain path
+narrows the declared list, `+path` force-includes one, and `!glob` / `-path`
+exclude.
+
+```json
+{
+  "packages": [
+    {
+      "source": "git:github.com/ezoushen/pi-extensions",
+      "extensions": ["extensions/footer/footer.ts"],
+      "skills": []
+    }
+  ]
+}
+```
+
 **One ordering rule, if you install both cache packages:** list `pi-prefix-stabilizer`
 before `pi-compaction-cache` in your `packages` array. The stabiliser normalises the
 provider payload, and the compaction extension captures that payload as its cache
