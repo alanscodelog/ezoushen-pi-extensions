@@ -27,6 +27,10 @@ function isShortcutKey(value: unknown): value is ShortcutKey {
  * order they were written. A prompt the user sends verbatim is dropped from
  * the queue, so an auto-restore can never duplicate something that was
  * already submitted.
+ *
+ * The /draft command adds the same way, taking the text as an argument so
+ * wrappers and other extensions can queue a draft without going through the
+ * editor.
  */
 export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: SettingsRuntime = {}): void {
 	const resolved = resolveSettings("pi-prompt-drafts", KEY_SETTING, {
@@ -105,8 +109,9 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 	// same moment the drafts are due back. Only explicit picks restore: ctrl+p
 	// cycling ("cycle") and session restore must not surface a draft. An
 	// occupied editor skips silently -- a selection is not a send worth
-	// interrupting. Extension commands (including /drafts) run before the input
-	// event inside session.prompt, so they never trigger a restore either.
+	// interrupting. Extension commands (including /drafts and /draft) run
+	// before the input event inside session.prompt, so they never trigger a
+	// restore either.
 	pi.on("model_select", (event, ctx) => {
 		if (event.source === "set") restoreNext(ctx, "skip");
 	});
@@ -125,6 +130,21 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 				return;
 			}
 			restoreOldest(ctx);
+		},
+	});
+
+	pi.registerCommand("draft", {
+		description: "Queue the given text as a draft without touching the editor (`/draft <message>`)",
+		handler: async (args, ctx) => {
+			const text = (args ?? "").trim();
+			if (!text) {
+				announce(ctx, "pi-prompt-drafts: usage: /draft <message>", "info", "pi-prompt-drafts:draft-usage");
+				return;
+			}
+			drafts.push(text);
+			const count = drafts.length;
+			const suffix = count === 1 ? "1 draft queued." : `${count} drafts queued.`;
+			announce(ctx, `pi-prompt-drafts: draft added. ${suffix}`, "info", "pi-prompt-drafts:draft-added");
 		},
 	});
 
