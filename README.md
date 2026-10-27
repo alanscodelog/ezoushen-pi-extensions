@@ -38,7 +38,7 @@ Each package is independent. Install only what you want.
 ### Install the whole repository from git
 
 ```sh
-pi install git:github.com/ezoushen/pi-extensions
+pi install git:github.com/alanscodelog/ezoushen-pi-extensions
 ```
 
 The repository root is also a package. It declares all nine extensions in
