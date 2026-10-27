@@ -40,6 +40,10 @@ function firstLine(text: string, max = 80): string {
  * so wrappers and other extensions can enqueue text directly. /drafts (no
  * args) opens a picker showing the first line of each draft; /drafts clear
  * discards the whole queue.
+ *
+ * Drafts are persisted as a custom session entry (`pi.appendEntry`) on every
+ * mutation, and restored on session_start from the current branch. This makes
+ * them survive reloads and resumes without leaking drafts across forks.
  */
 export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: SettingsRuntime = {}): void {
 	const resolved = resolveSettings("pi-prompt-drafts", KEY_SETTING, {
@@ -55,6 +59,11 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 	/** Saved drafts, oldest first. In-memory per pi process. */
 	const drafts: string[] = [];
 
+	/** Persist the current queue as a custom session entry. */
+	const persist = (): void => {
+		pi.appendEntry("prompt-drafts", { drafts: [...drafts] });
+	};
+
 	const restoreOldest = (ctx: ExtensionContext): boolean => {
 		const draft = drafts.shift();
 		if (draft === undefined) {
@@ -67,6 +76,7 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 			return false;
 		}
 		ctx.ui.setEditorText(draft);
+		persist();
 		announce(ctx, "pi-prompt-drafts: draft restored to the editor.", "info", "pi-prompt-drafts:restored");
 		return true;
 	};
@@ -83,6 +93,7 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 		const draft = drafts.shift();
 		if (draft === undefined) return false;
 		ctx.ui.setEditorText(draft);
+		persist();
 		announce(ctx, "pi-prompt-drafts: draft restored to the editor; press enter to send it.", "info", "pi-prompt-drafts:auto-restored");
 		return true;
 	};
@@ -140,19 +151,30 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 		drafts.splice(selectedIndex, 1);
 		if (ctx.ui.getEditorText().trim()) {
 			drafts.push(draft);
+			persist();
 			announce(ctx, "pi-prompt-drafts: the editor is not empty, so the draft was kept.", "warning", "pi-prompt-drafts:editor-busy");
 			return false;
 		}
 
 		ctx.ui.setEditorText(draft);
+		persist();
 		announce(ctx, "pi-prompt-drafts: draft restored to the editor.", "info", "pi-prompt-drafts:restored");
 		return true;
 	};
 
 	pi.on("session_start", (_event, ctx) => {
-		// Drafts do not follow the user across sessions; an old prompt
-		// surfacing in a new conversation would be a surprise, not a feature.
+		// Drafts are session-scoped, persisted as custom entries. Restore the
+		// last snapshot on the current branch so reloads/resumes keep the
+		// queue, but forks do not leak drafts from the parent branch.
 		drafts.length = 0;
+		const branch = ctx.sessionManager.getBranch();
+		const last = [...branch].reverse().find(
+			(entry) => entry.type === "custom" && entry.customType === "prompt-drafts",
+		);
+		const saved = last?.data?.drafts;
+		if (Array.isArray(saved)) {
+			drafts.push(...saved);
+		}
 		if (!validKey && !warnedAboutKey) {
 			announce(ctx, "pi-prompt-drafts: invalid key setting; using ctrl+s", "warning", "pi-prompt-drafts:invalid-key");
 			warnedAboutKey = true;
@@ -170,7 +192,10 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 	pi.on("input", (event, ctx) => {
 		const sent = event.text;
 		const index = drafts.indexOf(sent);
-		if (index !== -1) drafts.splice(index, 1);
+		if (index !== -1) {
+			drafts.splice(index, 1);
+			persist();
+		}
 		restoreNext(ctx, "notify");
 	});
 
@@ -197,6 +222,7 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 			if (text.trim()) {
 				drafts.push(text);
 				ctx.ui.setEditorText("");
+				persist();
 				announce(ctx, `pi-prompt-drafts: draft saved. It comes back when you send your next prompt, or press ${key} to restore it now.`, "info", "pi-prompt-drafts:saved");
 				return;
 			}
@@ -213,6 +239,7 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 				return;
 			}
 			drafts.push(text);
+			persist();
 			const count = drafts.length;
 			const suffix = count === 1 ? "1 draft queued." : `${count} drafts queued.`;
 			announce(ctx, `pi-prompt-drafts: draft added. ${suffix}`, "info", "pi-prompt-drafts:draft-added");
@@ -230,6 +257,7 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 			if (arg === "clear") {
 				const count = drafts.length;
 				drafts.length = 0;
+				persist();
 				let message = "pi-prompt-drafts: no drafts.";
 				if (count === 1) message = "pi-prompt-drafts: discarded 1 draft.";
 				if (count > 1) message = `pi-prompt-drafts: discarded ${count} drafts.`;
