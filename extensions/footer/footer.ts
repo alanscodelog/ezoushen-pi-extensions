@@ -158,13 +158,13 @@ export default function footer(pi: ExtensionAPI): void {
 				render(_width: number): string[] {
 					const dir = basename(ctx.cwd) || ctx.cwd;
 					const separator = theme.fg("borderMuted", " │ ");
-					const line = [
+					const segments = [
 						theme.fg("mdLink", dir),
 						formatGitSection(theme, footerData?.getGitBranch?.(), gitInfo),
 						formatContextSection(theme, ctx),
 						formatSpeedSection(theme, responseSpeed),
 						theme.fg("mdLink", formatModelName(ctx, pi)),
-					].filter((segment): segment is string => segment !== undefined).join(separator);
+					].filter((segment): segment is string => segment !== undefined);
 					const extensionStatusLines: string[] = [];
 					for (const [key, status] of footerData?.getExtensionStatuses?.() ?? []) {
 						const owner = `${STATUS_LABELS[key] ?? key} · `;
@@ -176,7 +176,7 @@ export default function footer(pi: ExtensionAPI): void {
 							extensionStatusLines.push(truncateToWidth(`${linePrefix}${statusLine.trimEnd()}`, _width, "…"));
 						}
 					}
-					return [truncateToWidth(line, _width, "…"), ...extensionStatusLines];
+					return [...wrapSegments(segments, separator, _width), ...extensionStatusLines];
 				},
 			};
 		});
@@ -248,6 +248,37 @@ export default function footer(pi: ExtensionAPI): void {
 		sessionElapsedMs = 0;
 		requestRender = undefined;
 	});
+}
+
+/**
+ * Pack whole segments into rows. A segment is never split: when it does not fit
+ * the remainder of the current row, the whole segment moves to the next row.
+ * Only a segment wider than the entire terminal is cut, with "…", because a
+ * footer row wider than the terminal breaks Pi's main-screen renderer.
+ */
+function wrapSegments(segments: string[], separator: string, width: number): string[] {
+	const separatorWidth = visibleWidth(separator);
+	const rows: string[] = [];
+	let row = "";
+	let rowWidth = 0;
+	for (const segment of segments) {
+		const segmentWidth = visibleWidth(segment);
+		if (row === "") {
+			row = segment;
+			rowWidth = segmentWidth;
+			continue;
+		}
+		if (rowWidth + separatorWidth + segmentWidth <= width) {
+			row += separator + segment;
+			rowWidth += separatorWidth + segmentWidth;
+			continue;
+		}
+		rows.push(row);
+		row = segment;
+		rowWidth = segmentWidth;
+	}
+	if (row !== "" || rows.length === 0) rows.push(row);
+	return rows.map((value) => truncateToWidth(value, width, "…"));
 }
 
 async function refreshGit(cwd: string): Promise<GitInfo> {

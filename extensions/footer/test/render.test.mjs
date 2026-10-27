@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import footer from "../footer.ts";
 
 function mount() {
@@ -41,6 +42,58 @@ function spyOnChildProcess() {
 		},
 	};
 }
+
+test("a narrow footer moves whole segments onto extra rows instead of trimming them", async () => {
+	const mounted = await mount();
+	assert.deepEqual(mounted.renderer.render(120), [
+		"my-project │ ██░░░░ 34% · 262k │ -- tps │ Catalog Model [–]",
+	]);
+	assert.deepEqual(mounted.renderer.render(24), [
+		"my-project",
+		"██░░░░ 34% · 262k",
+		"-- tps",
+		"Catalog Model [–]",
+	]);
+	assert.deepEqual(mounted.renderer.render(34), [
+		"my-project │ ██░░░░ 34% · 262k",
+		"-- tps │ Catalog Model [–]",
+	]);
+});
+
+test("wrapping keeps every segment intact whenever the segment fits the width", async () => {
+	const mounted = await mount();
+	const segments = ["my-project", "██░░░░ 34% · 262k", "-- tps", "Catalog Model [–]"];
+	for (const width of [18, 20, 24, 30, 34, 40, 60, 120]) {
+		const rows = mounted.renderer.render(width);
+		assert.ok(rows.every((row) => visibleWidth(row) <= width), `all rows fit width ${width}`);
+		assert.ok(!rows.some((row) => row.includes("…")), `no segment is trimmed at width ${width}`);
+		const joined = rows.join(" │ ");
+		for (const segment of segments) {
+			assert.ok(joined.includes(segment), `${segment} is intact at width ${width}`);
+		}
+	}
+});
+
+test("only a segment wider than the whole footer is trimmed", async () => {
+	const handlers = new Map();
+	let footerFactory;
+	footer({ on: (name, handler) => handlers.set(name, handler) });
+	const ctx = {
+		hasUI: true,
+		cwd: "/repo/my-project",
+		model: { id: "m", name: "Model", contextWindow: 262_000 },
+		getContextUsage: () => ({ tokens: 90_000 }),
+		ui: { setFooter: (value) => { footerFactory = value; } },
+	};
+	await handlers.get("session_start")({}, ctx);
+	const renderer = footerFactory({ requestRender() {} }, { fg: (_color, value) => value }, {});
+	const rows = renderer.render(12);
+	assert.ok(rows.every((row) => visibleWidth(row) <= 12), "all rows fit width 12");
+	assert.ok(rows.includes("my-project"), "a segment shorter than the width stays intact");
+	assert.ok(rows.includes("-- tps"), "a short segment is never trimmed");
+	assert.ok(rows.includes("Model [–]"), "the model segment fits and stays intact");
+	assert.ok(rows.includes(truncateToWidth("██░░░░ 34% · 262k", 12, "…")), "an over-wide segment falls back to an ellipsis");
+});
 
 test("render does not launch a child process", async () => {
 	const mounted = await mount();

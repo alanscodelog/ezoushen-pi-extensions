@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import footer from "../footer.ts";
 
 function mount(footerData = {}) {
@@ -83,8 +83,12 @@ test("all footer lines fit the available width", async () => {
 	assert.ok(mounted.renderer.render(120)[1].startsWith("│ pi-lens · "));
 	for (const width of [0, 1, 24, 60, 120]) {
 		const lines = mounted.renderer.render(width);
-		assert.equal(lines.length, 3);
+		assert.ok(lines.length >= 3);
 		assert.ok(lines.every((line) => visibleWidth(line) <= width), `all lines fit width ${width}`);
+		assert.deepEqual(lines.slice(-2), [
+			truncateToWidth("│ pi-lens · Searching the index", width, "…"),
+			truncateToWidth("│ owner-b · Ready", width, "…"),
+		]);
 	}
 });
 

@@ -21,16 +21,26 @@ node --test test/owner-status.test.mjs
 
 ## External contract
 
-One status line, then one line per extension that publishes a status:
+One status row, then one line per extension that publishes a status:
 
-```
+```text
 dir │ branch (#pr) (+added,-deleted) 5↑ 2↓ │ ██░░░░ 34% · 262k │ 27.4 tps │ (provider) Model [high]
 │ pi-lens · Searching the index
 │ perms · yolo
 ```
 
+When the pane is narrower than the row, whole segments move to extra rows rather than being cut. A segment is never split, so this footer still shows every part in full:
+
+```text
+my-project
+██░░░░ 34% · 262k
+27.4 tps
+(provider) Model [high]
+│ pi-lens · Searching the index
+```
+
 - **Rendering never blocks the terminal.** `render()` returns strings built from cached state only. It launches no child process, so a slow `git` or `gh` cannot stall a redraw.
-- **Every returned line fits the requested width.** The main line and each owner line are truncated to the width `render(width)` receives; content that does not fit is cut with `…` rather than allowed to overflow, because Pi's main-screen renderer rejects an over-width line.
+- **Segments wrap; only impossible ones are trimmed.** The main row packs whole segments (directory, git, context, speed, model) into as many rows as the width requires: a segment that does not fit the rest of the row moves whole to the next row, and its text is never split. Every returned line fits the requested width — only a segment wider than the entire terminal, or an owner line whose status text exceeds the width, falls back to a `…` cut, because Pi's main-screen renderer rejects an over-width line.
 - **Git and PR data arrive asynchronously.** `git status --porcelain`, `git diff HEAD --numstat` and `git rev-list --left-right --count @{upstream}...HEAD` run through `execFile` with a 2500 ms timeout; `gh pr view` uses the same bound. The third query supplies the ahead/behind commit counts shown as `5↑ 2↓`. Failures are swallowed and the footer keeps rendering its last known state.
 - **Refreshes are serialized.** At most one refresh runs at a time, bursts coalesce into a single queued follow-up with a 1000 ms floor, and every request advances a generation counter so a stale result can never overwrite a newer one.
 - **The PR number is cached per branch.** A "no PR" answer is remembered for that branch, so a normal refresh does not call `gh` again; only a branch change or a forced refresh re-asks.
