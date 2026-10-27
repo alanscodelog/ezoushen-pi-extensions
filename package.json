@@ -18,5 +18,21 @@
     "pretest:live": "npm run build",
     "test:live": "node --experimental-strip-types --test test/live/*.test.mjs",
     "pretest": "npm run build"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/prefix-stabilizer/prefix-stabilizer.ts",
+      "./extensions/compaction-cache/compaction-cache.ts",
+      "./extensions/focus-mode/focus-mode.ts",
+      "./extensions/interrupt-steer/interrupt-steer.ts",
+      "./extensions/quick-cancel/quick-cancel.ts",
+      "./extensions/prompt-drafts/prompt-drafts.ts",
+      "./extensions/image-thumbnails/image-thumbnails.ts",
+      "./extensions/context-redact/context-redact.ts",
+      "./extensions/footer/footer.ts"
+    ],
+    "skills": [
+      "./extensions/context-redact/skills"
+    ]
   }
 }

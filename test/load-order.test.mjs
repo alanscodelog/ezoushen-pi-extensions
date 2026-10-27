@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 
 import compactionCache from "../extensions/compaction-cache/compaction-cache.ts";
@@ -167,8 +167,7 @@ test("the ordering check detects the reversed extension order", async () => {
 const readmes = [
   join(import.meta.dirname, "..", "extensions", "prefix-stabilizer", "README.md"),
   join(import.meta.dirname, "..", "extensions", "compaction-cache", "README.md"),
-];
-// Both halves of the requirement, matched on substance rather than on one verbatim
+];// Both halves of the requirement, matched on substance rather than on one verbatim
 // sentence: the directive naming the two packages in order, and the reason it matters.
 // Asserting an exact sentence made this skip even once both READMEs said the right
 // thing in their own words, which is a false negative on the criterion it guards.
@@ -182,4 +181,33 @@ test("both package READMEs state the ordering requirement", () => {
     assert.ok(text.includes(ORDER_DIRECTIVE), `${path} does not state: ${ORDER_DIRECTIVE}`);
     assert.match(text, NORMALISE_BEFORE_CAPTURE, path);
   }
+});
+
+const repoRoot = join(import.meta.dirname, "..");
+const rootManifest = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+
+// `pi install git:github.com/ezoushen/pi-extensions` installs the repository as one
+// package, and a git checkout has no built .js files, so the root manifest points at
+// the TypeScript sources. Its order is the load order, which keeps the cache contract.
+test("the repository root package declares every extension source in load order", () => {
+  const declared = rootManifest.pi.extensions.map((entry) => ({ entry, path: resolve(repoRoot, entry) }));
+  assert.deepEqual(
+    declared.map(({ entry }) => entry),
+    [
+      "./extensions/prefix-stabilizer/prefix-stabilizer.ts",
+      "./extensions/compaction-cache/compaction-cache.ts",
+      "./extensions/focus-mode/focus-mode.ts",
+      "./extensions/interrupt-steer/interrupt-steer.ts",
+      "./extensions/quick-cancel/quick-cancel.ts",
+      "./extensions/prompt-drafts/prompt-drafts.ts",
+      "./extensions/image-thumbnails/image-thumbnails.ts",
+      "./extensions/context-redact/context-redact.ts",
+      "./extensions/footer/footer.ts",
+    ],
+  );
+  for (const { entry, path } of declared) {
+    assert.ok(existsSync(path), `manifest entry has no source on disk: ${entry}`);
+  }
+  const position = (packageName) => declared.findIndex(({ entry }) => entry.includes(`/${packageName}/`));
+  assert.ok(position("prefix-stabilizer") < position("compaction-cache"), ORDERING_MESSAGE);
 });
