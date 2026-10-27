@@ -1,4 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { DynamicBorder } from "@earendil-works/pi-coding-agent";
+import { Container, SelectList, Text } from "@earendil-works/pi-tui";
 import { announce } from "../../shared/announce.ts";
 import { resolveSettings, type SettingsRuntime } from "../../shared/settings.ts";
 
@@ -16,6 +18,12 @@ function isShortcutKey(value: unknown): value is ShortcutKey {
 		base !== undefined && (/^[a-z0-9]$/.test(base) || ["enter", "escape", "tab", "space", "backspace", "delete", "up", "down", "left", "right", "home", "end"].includes(base));
 }
 
+/** First line of a draft, truncated for display in the picker. */
+function firstLine(text: string, max = 80): string {
+	const line = text.split("\n")[0]?.trim() ?? "";
+	return line.length > max ? line.slice(0, max - 1) + "…" : line;
+}
+
 /**
  * Ctrl+S drafts for the prompt editor, in the style of Claude Code's message
  * queueing: press the draft key to set aside the text you are typing, keep
@@ -28,9 +36,10 @@ function isShortcutKey(value: unknown): value is ShortcutKey {
  * the queue, so an auto-restore can never duplicate something that was
  * already submitted.
  *
- * The /draft command adds the same way, taking the text as an argument so
- * wrappers and other extensions can queue a draft without going through the
- * editor.
+ * The /draft command pushes to the same queue without touching the editor,
+ * so wrappers and other extensions can enqueue text directly. /drafts (no
+ * args) opens a picker showing the first line of each draft; /drafts clear
+ * discards the whole queue.
  */
 export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: SettingsRuntime = {}): void {
 	const resolved = resolveSettings("pi-prompt-drafts", KEY_SETTING, {
@@ -75,6 +84,68 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 		if (draft === undefined) return false;
 		ctx.ui.setEditorText(draft);
 		announce(ctx, "pi-prompt-drafts: draft restored to the editor; press enter to send it.", "info", "pi-prompt-drafts:auto-restored");
+		return true;
+	};
+
+	/** Interactive picker: shows the first line of each draft, restores the chosen one. */
+	const pickDraft = async (ctx: ExtensionContext): Promise<boolean> => {
+		if (drafts.length === 0) {
+			announce(ctx, "pi-prompt-drafts: no drafts.", "info", "pi-prompt-drafts:empty");
+			return false;
+		}
+
+		const items = drafts.map((text, index) => ({
+			value: index,
+			label: firstLine(text),
+		}));
+
+		const selectedIndex = await ctx.ui.custom<number | null>((tui, theme, _kb, done) => {
+			const container = new Container();
+			container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+			container.addChild(new Text(theme.fg("accent", theme.bold("Drafts")), 1, 0));
+
+			const selectList = new SelectList(items, Math.min(items.length, 10), {
+				selectedPrefix: (t) => theme.fg("accent", t),
+				selectedText: (t) => theme.fg("accent", t),
+				description: (t) => theme.fg("muted", t),
+				scrollInfo: (t) => theme.fg("dim", t),
+				noMatch: (t) => theme.fg("warning", t),
+			});
+
+			selectList.onSelect = (item) => done(item.value);
+			selectList.onCancel = () => done(null);
+
+			container.addChild(selectList);
+			container.addChild(new Text(theme.fg("dim", "↑↓ navigate • enter restore • esc cancel"), 1, 0));
+			container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+
+			return {
+				render: (w) => container.render(w),
+				invalidate: () => container.invalidate(),
+				handleInput: (data) => {
+					selectList.handleInput(data);
+					tui.requestRender();
+				},
+			};
+		});
+
+		if (selectedIndex === null) return false;
+
+		const draft = drafts[selectedIndex];
+		if (draft === undefined) return false;
+
+		// Remove the chosen draft by index so duplicate texts don't lose the
+		// wrong entry. If the editor is occupied, push it back to the end so
+		// the draft is kept rather than silently dropped.
+		drafts.splice(selectedIndex, 1);
+		if (ctx.ui.getEditorText().trim()) {
+			drafts.push(draft);
+			announce(ctx, "pi-prompt-drafts: the editor is not empty, so the draft was kept.", "warning", "pi-prompt-drafts:editor-busy");
+			return false;
+		}
+
+		ctx.ui.setEditorText(draft);
+		announce(ctx, "pi-prompt-drafts: draft restored to the editor.", "info", "pi-prompt-drafts:restored");
 		return true;
 	};
 
@@ -149,11 +220,11 @@ export default function registerPromptDrafts(pi: ExtensionAPI, settingsRuntime: 
 	});
 
 	pi.registerCommand("drafts", {
-		description: "Restore the saved draft (`/drafts clear` discards every draft)",
+		description: "Pick a draft to restore (`/drafts clear` discards every draft)",
 		handler: async (args, ctx) => {
 			const arg = args?.trim() ?? "";
 			if (arg === "") {
-				restoreOldest(ctx);
+				await pickDraft(ctx);
 				return;
 			}
 			if (arg === "clear") {
